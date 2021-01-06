@@ -51,9 +51,31 @@ dat_norms <- dat[date < big_fire_day][, `:=`(month = month(date))] %>%
 dat <- merge(dat, dat_norms, by=c("x","y","month"))
 dat <- dat %>% lazy_dt() %>% 
   mutate(ndvi_anom = ndvi-ndvi_u) %>% 
-  mutate(ndvi_anom_sd = ndvi_anom/ndvi_usd) %>% 
+  mutate(ndvi_anom_sd = ndvi_anom/ndvi_usd, 
+         ndvi_fanom = ndvi/ndvi_u) %>% 
   as.data.table()
 
+dat[id==2200] %>% 
+  .[date>big_fire_day] %>% 
+  .[date<=big_fire_day+years(6)] %>% 
+  mutate(days_post_fire = as.double(date-big_fire_date)) %>% 
+  ggplot(data=.,aes(days_post_fire,ndvi_fanom))+
+  geom_line()+
+  geom_smooth()+
+  geom_smooth(method="nls", 
+              formula=y~Vmin+Vmax*(1-exp(-x/tau)), # this is an nls argument
+              method.args = list(start=c(tau=500,Vmin=0.5,Vmax=1)), # this too
+              se=F, color='red')
+
+curve(0+1*(1-exp(-x/500)),0,1500)
+
+dat %>% 
+  filter(id %in% sample.int(length(unique(dat$id)), 100)) %>% 
+  filter(between(date, ymd("2005-01-01"),ymd("2013-01-01"))) %>% 
+  left_join(., as_tibble(tmp_dem), by=c("x","y")) %>% 
+  ggplot(data=.,aes(date, ndvi_fanom, group=id, color=elevation))+
+  geom_line(size=0.2)+
+  scale_color_viridis_c()
 
 dat %>% 
   filter(id %in% sample.int(length(unique(dat$id)), 100)) %>% 
@@ -62,7 +84,6 @@ dat %>%
   ggplot(data=.,aes(date, ndvi_anom_sd, group=id, color=elevation))+
   geom_line(size=0.2)+
   scale_color_viridis_c()
-
 
 
 
