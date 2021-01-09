@@ -526,3 +526,140 @@ dat %>% as_tibble() %>%
   geom_point()+
   scale_color_viridis_d(end=0.8)+
   facet_grid(method~site)
+
+
+
+
+
+
+# # dat[id==95854] %>%
+#   din %>% 
+#   # mutate(ndvi = (nir-red)/(nir+red) ) %>%
+#   ggplot(data=.,aes(date,ndvi))+
+#   geom_line()+
+#   geom_line(aes(date,sndvi),color='blue')
+
+din <- dat[id==95854] # fire negative
+  
+dat[fire_doy>0][ndvi_fanom<0.5][sample(.N,10)]
+din <- dat[id==1550] # fire positive
+any(din$fire_doy>0)
+
+which(din$fire_doy>0)
+
+
+din %>% 
+  ggplot(data=.,aes(date, sndvi))+
+  geom_line()+
+  geom_vline( aes(xintercept=din[fire_doy>0]$date[1]),col='red')+
+  geom_hline(aes(yintercept=pre_fire_ndvi),color='navy')+
+  geom_hline(aes(yintercept=post_fire_ndvi),color='green')
+
+
+
+time_to_recover <- function(din){
+  din <- din[order(date)]
+  fire_bin <- any(din$fire_doy>0)
+  if(fire_bin==T){
+  fire_count <- sum(din$fire_doy>0)
+  first_fire_date <- din$date[which(din$fire>0)[1]]
+  pre_fire_quantile <- din[date < first_fire_date]$sndvi %>% na.omit() %>% quantile(., probs=0.75, na.rm=T)
+  pre_fire_ndvi_12mo <- din[date<first_fire_date &
+                         date>(first_fire_date-months(12))]$sndvi %>% mean
+  post_fire_ndvi_12mo <- din[date>=first_fire_date &
+                         date<(first_fire_date+months(12))]$sndvi %>% mean
+  # post_fire_ndvi <- din[date %in% c(first_fire_date, first_fire_date+months(1))]$sndvi %>% min
+  delta_ndvi <- as.double(post_fire_ndvi_12mo - pre_fire_ndvi_12mo)
+  recovery_date <- din[date > first_fire_date][sndvi >= pre_fire_quantile]$date %>% min
+  ttr <- as.double(recovery_date - first_fire_date)
+  
+  vec_y <- din[date<first_fire_date &
+        date>(first_fire_date-months(37))]$sndvi
+  vec_x <- seq(length(vec_y)/-24,length(vec_y)/24,length.out = length(vec_y))
+  vec_pre_coef <- tryCatch(
+    coef(fastLm(X=cbind(1,vec_x), y=vec_y)), 
+    error=function(cond){return(NA)})
+
+  vec_y <- din[date>first_fire_date &
+                 date<=recovery_date]$sndvi
+  vec_x <- seq(0,length(vec_y)/12,length.out = length(vec_y))
+  vec_post_coef <- tryCatch(
+    coef(fastLm(X=cbind(1,vec_x), y=vec_y)), 
+    error=function(cond){return(NA)})
+  
+  out <- data.table(fire_bin=fire_bin,
+                    fire_count = fire_count,
+                    first_fire_date = first_fire_date,
+                    pre_fire_ndvi75=pre_fire_quantile,
+                    ttr = ttr,
+                    delta_ndvi = delta_ndvi,
+                    pre_fire_ndvi_12mo = pre_fire_ndvi_12mo, 
+                    post_fire_ndvi_12mo = post_fire_ndvi_12mo, 
+                    trend_pre_36mo = vec_pre_coef[2], 
+                    trend_to_recover = vec_post_coef[2])
+  }else{
+    out <- data.table(fire_bin=fire_bin,
+                      fire_count = NA_integer_,
+                      first_fire_date = NA_Date_,
+                      pre_fire_ndvi75=NA_real_,
+                      ttr = NA_real_,
+                      delta_ndvi = NA_real_,
+                      pre_fire_ndvi_12mo = NA_real_, 
+                      post_fire_ndvi_12mo = NA_real_, 
+                      trend_pre_36mo = NA_real_, 
+                      trend_to_recover = NA_real_)
+  }
+  return(out)
+}
+
+din <- dat[id==1]
+system.time(junk <- dat[id%in%c(1,1550)][,time_to_recover(.SD), by=.(x,y)])
+
+vec <- sample.int(95854, 100)
+system.time(dat[id%in%vec][,time_to_recover(.SD), by=.(x,y)])
+
+for(i in 1:length(vec)){
+  system.time(dat[id%in%vec[i]][,time_to_recover(.SD), by=.(x,y)])
+}
+
+vec[i]
+dat[id%in%vec[i]][,time_to_recover(.SD), by=.(x,y)]
+din <- dat[id%in%vec[i]]
+
+dat[date==min(date) & fire_doy>0]
+
+
+
+time_to_recover(dat[id==11225])
+
+dat[id%in%vec] %>% 
+  ggplot(data=.,aes(date,ndvi_fmax,group=id))+
+  geom_line()
+
+dat %>% lazy_dt() %>%
+  group_by(x,y,month) %>% 
+  mutate(ndvi_fmax = sndvi/ndvi_mmax) %>% 
+  ungroup() %>% show_query()
+
+din <- dat[id==11225]
+
+
+
+
+vec <- sample.int(95854, 10000)
+system.time(dat[id%in%vec][,time_to_recover_fmax(.SD), by=.(x,y)])
+
+for(i in 1:length(vec)){
+  system.time(dat[id%in%vec[i]][,time_to_recover(.SD), by=.(x,y)])
+}
+
+
+dat[fire_doy>0 & date>=ymd("2019-08-01")] %>% dim
+
+
+dat %>% lazy_dt() %>% 
+  group_by(date) %>% 
+  summarize(val = sum(fire_doy >0)) %>% 
+  ungroup() %>% 
+  as_tibble() %>% 
+  ggplot(data=.,aes(date, val))+geom_line()

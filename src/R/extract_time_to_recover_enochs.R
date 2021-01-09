@@ -1,4 +1,4 @@
-# Description: This is a prototype script to calculate the time to recover from
+# Description: Prototype script to calculate the time to recover from
 # fire in SE Australian Eucalyptus dominant forests.
 # Author: Sami Rifai
 # Date (init): 2020-01-06
@@ -58,19 +58,143 @@ dat <- dat %>% mutate(year=year(date),month=month(date))
 dat <- dat %>% as.data.table()
 
 
+# Smooth data with Whittaker filter -----------------------------
+smooth_ndvi <- function(din){
+  din <- as.data.table(din)
+  x0 <- din$ndvi
+  x1 <- data.table::nafill(x0,type = 'locf')
+  x3 <- phenofit::whit2(x1,lambda = 2)
+  out <- din
+  out$sndvi <- x3
+  return(out)
+}
+system.time(dat <- dat[,smooth_ndvi(.SD), by=.(x,y)])
+
+
+
 # Calculate anomalies -----------------------------------------------------
 dat_norms <- dat[date < big_fire_day][, `:=`(month = month(date))] %>% 
-  .[, .(ndvi_u = mean(ndvi, na.rm=TRUE), 
-        ndvi_usd = sd(ndvi, na.rm=TRUE)), 
+  .[, .(ndvi_u = mean(sndvi, na.rm=TRUE), 
+        ndvi_usd = sd(sndvi, na.rm=TRUE)), 
     keyby = .(x,y,month)]
 
 dat <- merge(dat, dat_norms, by=c("x","y","month"))
 dat <- dat %>% lazy_dt() %>% 
-  mutate(ndvi_anom = ndvi-ndvi_u) %>% 
+  mutate(ndvi_anom = sndvi-ndvi_u) %>% 
   mutate(ndvi_anom_sd = ndvi_anom/ndvi_usd, 
-         ndvi_fanom = ndvi/ndvi_u) %>% 
+         ndvi_fanom = sndvi/ndvi_u) %>% 
   as.data.table()
 
 
+time_to_recover <- function(din){
+  pre_fire_90 <- din[date <= big_fire_day]$sndvi %>% na.omit() %>% median() #quantile(., probs=0.75, na.rm=T)
+  recovery_date <- din[date > big_fire_day][sndvi >= pre_fire_90]$date %>% min
+  recovery_interval <- (recovery_date - big_fire_day)
+  recovery_interval <- as.double(recovery_interval) 
+  fire_bin <- din[date==big_fire_day]$fire_doy > 0
+  pre_fire_ndvi <- din[date==(big_fire_day-months(1))]$sndvi
+  post_fire_ndvi <- din[date==(big_fire_day+months(1))]$sndvi
+  delta_ndvi <- as.double(pre_fire_ndvi - post_fire_ndvi) 
+  pre_ndvi <- din[date==(big_fire_day-months(1))]$sndvi
+  out <- data.table(fire_bin=fire_bin, 
+                    ttr = recovery_interval, 
+                    delta_ndvi = delta_ndvi, 
+                    pre_ndvi = pre_ndvi)
+  # out$ttr <- recovery_interval
+  # out$delta_ndvi <- delta_ndvi
+  # out$pre_ndvi <- pre_ndvi
+  return(out)
+}
+
+time_to_recover_fa <- function(din){
+  # pre_fire_90 <- din[date <= big_fire_day]$sndvi %>% na.omit() %>% median() #quantile(., probs=0.75, na.rm=T)
+  recovery_date <- din[date > big_fire_day][ndvi_fanom >= 1]$date %>% min
+  recovery_interval <- (recovery_date - big_fire_day)
+  recovery_interval <- as.double(recovery_interval) 
+  fire_bin <- din[date==big_fire_day]$fire_doy > 0
+  pre_fire_ndvi <- din[date==(big_fire_day-months(1))]$sndvi
+  post_fire_ndvi <- din[date==(big_fire_day+months(1))]$sndvi
+  delta_ndvi <- as.double(post_fire_ndvi - pre_fire_ndvi)
+  delta_fanom <- din[date==(big_fire_day+months(1))]$ndvi_fanom - din[date==(big_fire_day-months(1))]$ndvi_fanom
+  pre_ndvi <- din[date==(big_fire_day-months(1))]$sndvi
+  out <- data.table(fire_bin=fire_bin, 
+                    ttr = recovery_interval, 
+                    delta_ndvi = delta_ndvi,
+                    delta_fanom = delta_fanom, 
+                    pre_ndvi = pre_ndvi)
+  # out$ttr <- recovery_interval
+  # out$delta_ndvi <- delta_ndvi
+  # out$pre_ndvi <- pre_ndvi
+  return(out)
+}
 
 
+dat[fire_bin==T][id %in% sample.int(3880, 10)] %>% 
+  ggplot(data=.,aes(date, ndvi_fanom,group=id))+
+  geom_line()
+
+
+# apply function to data
+system.time(dat1 <- dat[,time_to_recover_fa(.SD), by=.(x,y)])
+
+
+dat1 %>% 
+  filter(fire_bin==T) %>% 
+  ggplot(data=.,aes(x,y,fill=ttr))+
+  geom_tile()+
+  coord_equal()+
+  geom_point(data=dat[date==big_fire_day&fire_doy>=1], aes(x,y), 
+             size=0.1,fill=NA,color='white')+
+  scale_fill_viridis_c(option='B',direction = 1)
+
+dat1[fire_bin==T]$ttr %>% hist
+dat1[fire_bin==T] %>% 
+  ggplot(data=.,aes(ttr, delta_fanom))+
+  geom_point()
+
+dat1[fire_bin==T] %>% 
+  ggplot(data=.,aes(pre_ndvi, delta_ndvi))+
+  geom_point()+
+  geom_smooth(method='lm')
+
+
+x <- dat[id==2044]$sndvi
+library(Rfast)
+microbenchmark::microbenchmark(
+  min_max(x), 
+  min(x))
+
+
+
+library(tdigest)
+microbenchmark::microbenchmark(
+  quantile(dat[id==2044]$sndvi, 0.9), 
+  tquantile(dat[id==2044]$sndvi, 0.9))
+
+td_create(dat$ndvi)
+td_q(dat[id==2044]$sndvi, probs = 0.9)
+
+din <- dat[id==2044]
+dat[id==2044] %>%
+  filter(year==2006) %>%
+  ggplot(data=.,aes(date,sndvi))+
+  geom_line()+
+  geom_vline(aes(xintercept=big_fire_date),color='red')
+
+
+
+
+
+dat1[fire_bin==T]$ttr %>% hist
+
+dat[id==2044] %>% ggplot(data=.,aes(date,ndvi))+geom_line()+
+  geom_hline(aes(yintercept= . %>% 
+               filter(date<big_fire_date) %>% 
+               pull(ndvi) %>% 
+               na.omit() %>% 
+               quantile(.,0.9)))
+
+  
+dat[id==2044] %>%
+  ggplot(data=.,aes(month, ndvi,color=factor(year)))+
+  geom_point()
