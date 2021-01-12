@@ -646,7 +646,8 @@ din <- dat[id==11225]
 
 
 
-vec <- sample.int(95854, 10000)
+vec <- sample.int(95854, 1)
+
 system.time(dat[id%in%vec][,time_to_recover_fmax(.SD), by=.(x,y)])
 
 for(i in 1:length(vec)){
@@ -654,7 +655,7 @@ for(i in 1:length(vec)){
 }
 
 
-dat[fire_doy>0 & date>=ymd("2019-08-01")] %>% dim
+dat[fire_doy>0 & date>=ymd("2019-08-01")]
 
 
 dat %>% lazy_dt() %>% 
@@ -663,3 +664,37 @@ dat %>% lazy_dt() %>%
   ungroup() %>% 
   as_tibble() %>% 
   ggplot(data=.,aes(date, val))+geom_line()
+
+din <- dat[id==63795]
+
+as.data.table(tmp_fire) %>% 
+ lazy_dt() %>% 
+  group_by(date) %>% 
+  summarize(val = sum(fire_doy)) %>% 
+  ungroup() %>% 
+  as_tibble() %>% 
+  ggplot(data=.,aes(date, val))+geom_line()
+
+
+dat[date==min(date)] %>% 
+  ggplot(data=.,aes(x,y,fill=nir))+
+  geom_sf(data=oz_poly,inherit.aes = F)+
+  geom_tile()
+  
+ggplot()+
+  geom_sf(data=oz_poly,inherit.aes = F)+
+  geom_stars(data=tmp1_red[,,,1])+
+  geom_stars(data=tmp2_red[,,,1])+
+  geom_stars(data=tmp3_red[,,,1])+
+  geom_stars(data=tmp4_red[,,,1])
+
+
+st_get_dimension_values(tmp_dem, 1) %in% unique(dat$x) %>% table
+st_get_dimension_values(tmp_dem, 2) %in% unique(dat$y) %>% table
+
+c(tmp1,tmp2,along=c(1,2))
+
+
+dat[id==10333] %>% 
+  ggplot(data=.,aes(date,sndvi))+
+  geom_line()
