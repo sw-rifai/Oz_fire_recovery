@@ -11,3 +11,15 @@ Main Qs:
 4.  If possible w/historical Landsat record. Has increased CO2 accelerated the time to recover from fire?
 
 
+
+Notes: approximate processing order:
+
+(1) preprocess\_data.R \# needs 128gb ram
+
+(2) extract\_linear\_time\_to\_recover\_SE\_coast.R
+
+(3) fit\_weibull\_ttr.R \# needs a few hours
+
+(4) separate\_pixel\_groups.R
+
+(?) attach\_climate\_to\_vi \# merge into later scripts?
