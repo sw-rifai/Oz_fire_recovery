@@ -221,7 +221,13 @@ dat %>%
   geom_smooth(method='lm')
 
 lm(ttr~ppet_anom_12mo+post_ppet_anom_12mo, data=dat) %>% summary
+
+
+# mgcv time to inflection ---------------------------------------
 library(mgcv)
+fg0 <- bam(inflection~s(delta_vi_12mo,bs='cs',k=5),
+           data=dat, select=TRUE)
+
 fg1 <- bam(inflection~s(precip_anom_12mo,bs='cs',k=5)+
              s(post_precip_anom_12mo,bs='cs',k=5)+
              s(vpd15_anom_12mo,bs='cs',k=5)+
@@ -230,6 +236,10 @@ fg1 <- bam(inflection~s(precip_anom_12mo,bs='cs',k=5)+
 summary(fg1)
 plot(fg1)
 gratia::draw(fg1)
+
+
+
+
 
 library(tidymodels)
 set.seed(123)
