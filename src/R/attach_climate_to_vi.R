@@ -133,8 +133,8 @@ ma_clim <- lazy_dt(clim) %>%
             matmin = mean(tmin_ma,na.rm=TRUE), 
             mavpd9 = mean(vpd9_ma,na.rm=TRUE), 
             mavpd15 = mean(vpd15_ma,na.rm=TRUE), 
-            map = mean(precip_ma,na.rm=TRUE)*12, 
-            mapet = mean(pet_ma,na.rm=TRUE)*12, 
+            map = mean(precip_ma,na.rm=TRUE), 
+            mapet = mean(pet_ma,na.rm=TRUE), 
             mappet = mean(ppet_ma,na.rm=TRUE)) %>% 
   as.data.table()
 
@@ -158,8 +158,6 @@ clim <- clim[, `:=`(
                   vpd15_anom_sd = vpd15_anom/vpd15_sd, 
                   vpd9_anom_sd = vpd9_anom/vpd9_sd)]
 clim <- clim %>% lazy_dt() %>% mutate(date=as.Date(date)) %>% as.data.table()
-arrow::write_parquet(clim, sink="/home/sami/scratch/awap_clim_se_coastal.parquet", 
-                     compression='snappy')
 #*******************************************************************************
 #* END SECTION
 #*******************************************************************************
@@ -182,6 +180,27 @@ clim <- clim[order(x,y,date)][, vpd15_anom_12mo := frollapply(vpd15_anom,FUN=mea
 clim <- clim[order(x,y,date)][, precip_anom_12mo := frollsum(precip_anom,n = 12,fill = NA,align='right'), by=.(x,y)]
 clim <- clim[order(x,y,date)][, pet_anom_12mo := frollsum(pet_anom,n = 12,fill = NA,align='right'), by=.(x,y)]
 clim <- clim[order(x,y,date)][, ppet_anom_12mo := frollmean(ppet_anom,n = 12,fill = NA,align='right'), by=.(x,y)]
+
+
+clim <- clim[order(x,y,date)][, post_precip_12mo := frollsum(precip,n = 12,fill = NA,align='left'), by=.(x,y)]
+clim <- clim[order(x,y,date)][, post_pet_12mo := frollsum(pet,n = 12,fill = NA,align='left'), by=.(x,y)]
+clim <- clim[order(x,y,date)][, post_ppet_12mo := frollmean(ppet,n = 12,fill = NA,align='left'), by=.(x,y)]
+clim <- clim[order(x,y,date)][, post_tmax_anom_12mo := frollapply(tmax_anom,FUN=max,
+                                                             n = 12,fill = NA,align='left'), by=.(x,y)]
+clim <- clim[order(x,y,date)][, post_tmin_anom_12mo := frollapply(tmin_anom,FUN=max,
+                                                             n = 12,fill = NA,align='left'), by=.(x,y)]
+clim <- clim[order(x,y,date)][, post_vpd15_12mo := frollapply(vpd15_anom,FUN=mean,
+                                                         n = 12,fill = NA,align='left'), by=.(x,y)]
+clim <- clim[order(x,y,date)][, post_vpd15_anom_12mo := frollapply(vpd15_anom,FUN=mean,
+                                                              n = 12,fill = NA,align='left'), by=.(x,y)]
+clim <- clim[order(x,y,date)][, post_precip_anom_12mo := frollsum(precip_anom,n = 12,fill = NA,align='left'), by=.(x,y)]
+clim <- clim[order(x,y,date)][, post_pet_anom_12mo := frollsum(pet_anom,n = 12,fill = NA,align='left'), by=.(x,y)]
+clim <- clim[order(x,y,date)][, post_ppet_anom_12mo := frollmean(ppet_anom,n = 12,fill = NA,align='left'), by=.(x,y)]
+
+arrow::write_parquet(clim, sink="/home/sami/scratch/awap_clim_se_coastal.parquet", 
+                     compression='snappy')
+
+
 
 
 #*******************************************************************************

@@ -79,6 +79,7 @@ burn_dates <- merge(burn_dates, nburns, by='id')
 arrow::write_parquet(burn_dates, sink = "outputs/first_last_burn_dates.parquet")
 
 
+
 # Process 2003-2004 fires --------------------------------------------
 vec_2003 <- dat %>% lazy_dt() %>% 
   filter(between(year,2003,2004)) %>%

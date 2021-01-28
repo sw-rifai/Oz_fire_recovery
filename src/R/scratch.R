@@ -2146,7 +2146,7 @@ tmp2 <- expand_grid(merge(sdat,nvis, by='id') %>%
   filter(vc!=25) %>%
   filter(vc %in% c(2,3,4,5,11)) %>% 
   filter(is.na(vc)==FALSE) %>% 
-  sample_n(250), 
+  sample_n(20), 
   pred_days=seq(1,2000,length.out=2000) %>% floor) %>% 
   mutate(pred = SSweibull(x=pred_days, Asym, Drop, lrc, pwr), 
          p_diff = Drop*pwr*pred_days^pwr*exp(lrc)*exp(-pred_days^pwr*exp(lrc))/pred_days) %>% 
@@ -2168,7 +2168,7 @@ tmp2 %>%
   merge(., vec_inflection, by='id') %>% 
   mutate(slowgrow = if_else(id%in%vec_slowgrow[low_grow_days>=100]$id,
                             'delayed','instant')) %>% 
-  ggplot(data=.,aes(pred_days, pred, group=factor(id), color=slowgrow))+
+  ggplot(data=.,aes(pred_days, pred, group=factor(id)))+
   geom_line(lwd=0.1)+
   geom_vline(aes(xintercept=inflection,group=factor(id)),col='black',lwd=0.25)+
   geom_hline(aes(yintercept=-0.5*Drop,group=factor(id)),col='black',lwd=0.25)+
@@ -2177,7 +2177,7 @@ tmp2 %>%
   labs(x='Days post fire',
        y='NDVI Anom.',
        title='Weibull Fit - Fires 2003/2004')+
-  scale_color_viridis_d('Linear TTR (days)',end=0.9)+
+  scale_color_viridis_d('Linear TTR (days)',end=0.7)+
   facet_wrap(~vc_name)+
   theme_linedraw()+
   theme(panel.grid = element_blank(), 
@@ -2213,3 +2213,18 @@ expand_grid(merge(n_w[isConv==TRUE][sample(.N,100)], mdat, by=c("x","y","id")),
   theme(panel.grid = element_blank(), 
         legend.position = c(1,0), 
         legend.justification = c(1,0))
+
+
+
+n_w <- arrow::read_parquet("outputs/weibull_fits_pre2005_fires_2021-01-18.parquet")
+
+
+
+sdat[date_first_fire < ymd('2005-01-01')][is.na(ttr)==F]$fire_count[fire_count==1]
+
+
+
+
+
+
+sdat[fire_count==1]$date_first_fire %>% min
