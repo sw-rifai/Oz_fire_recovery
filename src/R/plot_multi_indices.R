@@ -81,9 +81,11 @@ tmp <- dat %>% lazy_dt() %>%
   ungroup() %>% 
   as.data.table()
 tmp %>% 
-  gather(-date, key='key',value='value') %>% 
-  ggplot(data=.,aes(date, value,color=key))+
-  geom_line()
+  gather(-date, key='anom',value='value') %>% 
+  ggplot(data=.,aes(date, value,color=anom))+
+  geom_line()+
+  scico::scale_color_scico_d(end=0.8)+
+  theme_linedraw()
   # geom_line(col='blue')+
   # geom_line(aes(date,0.1*nburns/max(nburns)),col='red')
   # 

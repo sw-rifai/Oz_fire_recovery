@@ -142,48 +142,118 @@ dat <- merge(dat, clim, by=c("idx_awap","date"))
 #   library(tidyverse); library(lubridate);
 #   library(data.table)
 #   gc(reset = T, full = T)  
-min_lag <- -12
-max_lag <- 12
+min_lag <- 48
+max_lag <- -48
 
 # precip anom lags
 gc(reset = TRUE,full=T)
-mat_p <- clim[,.(x,y,idx_awap,date,precip_anom)][order(x,y,idx_awap,date), c(paste0("precip_anom_",min_lag:max_lag)) := shift(precip_anom, min_lag:max_lag) , .(x,y)][order(date)]
+mat_p <- clim[,.(x,y,idx_awap,date,precip_anom)][order(x,y,idx_awap,date), c(paste0("precip_anom_",min_lag:max_lag)) := shift(precip_anom, n=min_lag:max_lag) , .(x,y)][order(date)]
+mat_p <- mat_p[date>=ymd("2002-01-01")]
+clim2 <- clim[date>=ymd("2002-01-01")]
+# mat_p[date==ymd("2010-01-01")]
 mat_p <- mat_p %>% #rename(precip_anom_0 = precip_anom) %>% 
-  select(-x,-y,-date,-precip_anom)
+  select(-x,-y,-idx_awap,-date,-precip_anom)
 gc(verbose = T, reset = T, full = T)
 
 
-lag_n <- min_lag:max_lag ## create time lag matrix...
+# lag_n <- min_lag:max_lag ## create time lag matrix...
+lag_n <- max_lag:min_lag ## create time lag matrix...
 
-tmp_mat <- t(matrix(lag_n,length(lag_n),length(clim$x)))
-tmp <- as_tibble(clim) # tibbles can contain matrices within a column
+tmp_mat <- t(matrix(lag_n,length(lag_n),length(clim2$x)))
+tmp <- as_tibble(clim2) # tibbles can contain matrices within a column
 tmp$lag_month <- tmp_mat # lag index is needed for GAM
 tmp$lag_precip_anom <- as.matrix(mat_p)
-tmp$lag_precip_anom[1]
+tmp$lag_precip_anom[3000,]
 head(tmp) %>% as.data.table()
 
+junk <- as.matrix(mat_p)
+junk[30000,]
+mat_p[30000,]
 
-tmp2 <- left_join(dat[, .(x.x,y.x,idx_awap,date,vc,vc_name,ttr,inflection,delta_vi_12mo)] %>% as_tibble(), 
+tmp2 <- left_join(dat[, .(x.x,y.x,idx_awap,date,vc,vc_name,ttr,inflection,delta_vi_12mo)][date>=ymd("2002-01-01")] %>% as_tibble(), 
           tmp,
           by=c("idx_awap","date"))
+gc(full=TRUE)
+# save(tmp2, file = 'outputs/test_lag_matrix.rds')
+# load('outputs/test_lag_matrix.rds')
+tmp2 <- tmp2 %>% filter(date>ymd("2002-01-01"))
+tmp2$lag_precip_anom[1,]
 
 fit1     <- bam(ttr ~ 
+                  s(delta_vi_12mo)+
                   s(year)+
-                  s(lag_month,by=lag_precip_anom, bs='cs'),
+                  s(post_vpd15_anom_12mo)+
+                  s(lag_month,by=lag_precip_anom,bs='gp'),
                   data=tmp2 %>% 
                   mutate(year=year(date)) %>% 
                   mutate(month=month(date)) %>% 
                   filter(month %in% c(12,1,2)) %>% 
-                  filter(vc %in% c(2,3,5,11)) %>% 
-                  sample_n(50000),
+                  filter(vc %in% c(2,3,5,11)),
+                # family=Gamma(link='log'),
                 select=TRUE, method='fREML', discrete = T, nthreads = 6)
 summary(fit1)
-plot(fit1, select = 4, scale=0);abline(h=0)
+plot(fit1, scale=0);abline(h=0)
 gratia::evaluate_smooth(fit1, smooth = "s(lag_month):lag_precip_anom") %>% 
-  mutate(est=est) %>% gratia::draw()
+  mutate(est=est) %>% 
+  mutate(lag_month = 1*lag_month) %>% 
+  gratia::draw()+
+  labs(title='Time to Recover Point: Precip anomaly effect', 
+       x='Shift Month', 
+       y='Linear Precip Anom. Effect')
+
+tmp2[1,] %>% select(idx_awap,date,lag_precip_anom)
+clim[idx_awap==2135 & date>=ymd("2010-03-01") & date <= ymd("2012-03-01")] %>% 
+  ggplot(data=.,aes(date,precip_anom))+geom_line()
+clim[idx_awap==2135 & date>=ymd("2010-03-01") & date <= ymd("2012-03-01")][order(date)]$precip_anom %>% plot
+lines(tmp2[1,]$lag_precip_anom %>% as.numeric)
+
+
+mat_p[1,] %>% as.numeric %>% plot
 
 tmp2$date %>% month %>% table
 tmp2$vc_name
 
 
 tmp2 %>% filter(vc %in% c(2,3,5,11)) %>% pull(vc_name) %>% table
+
+
+
+
+
+
+
+
+mat_p <- clim[,.(x,y,idx_awap,date,precip_anom)][order(x,y,idx_awap,date), c(paste0("precip_anom_",min_lag:max_lag)) := shift(precip_anom, n=min_lag:max_lag) , .(x,y)][order(date)]
+mat_p <- mat_p[date>=ymd("2002-01-01")]
+clim2 <- clim[date>=ymd("2002-01-01")]
+mat_p$idx_awap[1]
+mat_p$date[1]
+mat_p[1,6:30] %>% as.numeric() ~mat_p[1]$date
+clim[idx_awap==2135][date>=ymd("2001-01-01")][date<=ymd("2003-01-01")][order(date)]$precip_anom %>% lines(col='red')
+
+clim[idx_awap==2135][date>=ymd("2001-01-01")][date<=ymd("2003-01-01")][order(date)] %>% 
+  plot(precip_anom~date, data=.)
+lines(mat_p[1,6:30] %>% as.numeric()~clim[idx_awap==2135][date>=ymd("2001-01-01")][date<=ymd("2003-01-01")][order(date)]$date)
+clim[idx_awap==2135][date>=ymd("2001-01-01")][date<=ymd("2003-01-01")][order(date)]$precip_anom %>% lines(col='red')
+
+# mat_p[date==ymd("2010-01-01")]
+mat_p <- mat_p %>% #rename(precip_anom_0 = precip_anom) %>% 
+  select(-x,-y,-idx_awap,-date,-precip_anom)
+
+
+
+fit2     <- bam(ttr ~ 
+                  s(delta_vi_12mo, bs='cs', k=5)+
+                  s(year, bs='ad', k=10)+
+                  s(post_vpd15_anom_12mo, bs='cs', k=5)+
+                  s(vpd15_anom_12mo, bs='cs', k=5),
+                data=tmp2 %>% 
+                  mutate(year=year(date)) %>% 
+                  mutate(month=month(date)) %>% 
+                  filter(month %in% c(12,1,2)) %>% 
+                  filter(vc %in% c(2,3,5,11)),
+                # family=Gamma(link='log'),
+                select=TRUE, method='fREML', discrete = T, nthreads = 6)
+summary(fit2)
+plot(fit2)
+
