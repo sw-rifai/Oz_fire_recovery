@@ -4,7 +4,7 @@ library(sf); library(stars)
 library(tidyverse); 
 library(data.table); library(lubridate);
 library(dtplyr)
-setDTthreads(threads=8)
+setDTthreads(threads=16)
 
 
 #*******************************************************************************
@@ -41,7 +41,6 @@ names(apet) <- "pet"
 st_crs(apet) <- st_crs(4326)
 gc(full=TRUE)
 
-
 atmax <- filter(atmax,time>=ymd("2000-01-01"))
 atmin <- filter(atmin,time>=ymd("2000-01-01"))
 atmax <- c(atmax,atmin, try_hard=TRUE)
@@ -67,8 +66,29 @@ eoz_box <- st_bbox(c(xmin = min(base$x),
                    crs = st_crs(4326))
 clim <- st_crop(clim, eoz_box)
 
+
+mv20 <- stars::read_ncdf("../data_general/clim_grid/awap/AWAP/tmp_2020/awap2020_mvar_monthly_espg4326.nc", 
+                         make_units = F, proxy=F) %>% 
+  st_set_dimensions(.,3,values=seq(ymd("2020-01-01"),ymd("2020-12-01"),by='1 month'), 
+                    names = 'time')
+mv20 <- st_crop(mv20, eoz_box)
+mv20 <- st_warp(mv20,dest=clim)
+
+
+mv20 <- mv20 %>% as.data.table()
+mv20 <- mv20 %>% lazy_dt() %>% 
+  rename(#longitude=lon, latitude=lat, 
+         vp9=vapourpres, vp15=vapourpres_2) %>% 
+  as.data.table()
+mv20$pet <- NA
+
+
 clim <- clim %>% as.data.table() %>% 
-                units::drop_units()
+  units::drop_units()
+
+clim <- clim %>% lazy_dt() %>% mutate(time=as.Date(time)) %>% as.data.table()
+clim <- rbindlist(list(clim,mv20),use.names = TRUE, fill=TRUE)
+
 #*******************************************************************************
 #* END SECTION
 #*******************************************************************************
@@ -78,7 +98,7 @@ clim <- clim %>% as.data.table() %>%
 #*******************************************************************************
 clim <- clim %>% rename(x=longitude, y=latitude, date=time)
 clim <- clim[is.na(tmax)==FALSE]
-clim <- clim[is.na(pet)==FALSE]
+clim <- clim[(is.na(pet)==FALSE && date <= ymd("2019-12-01"))]
 
 clim <- clim[, `:=`(month = month(date))] # create month
 clim <- clim[, `:=`(year = year(date))]   # create year

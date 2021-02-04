@@ -15,6 +15,16 @@ oz_poly <- sf::read_sf("../data_general/Oz_misc_data/gadm36_AUS_shp/gadm36_AUS_1
   select(NAME_1)
 
 # Import Fire ---------------------------------------------------
+tmp1 <- stars::read_stars("../data_general/MCD43/MCD43A4_nir_red_median_500m_SE_coastal_MonMean_maskNonForest_2001-01-01_to_2020-12-31-0000000000-0000000000.tif", 
+                          proxy = F) 
+tmp2 <- stars::read_stars("../data_general/MCD43/MCD43A4_nir_red_median_500m_SE_coastal_MonMean_maskNonForest_2001-01-01_to_2020-12-31-0000000000-0000001536.tif", 
+                          proxy = F) 
+tmp3 <- stars::read_stars("../data_general/MCD43/MCD43A4_nir_red_median_500m_SE_coastal_MonMean_maskNonForest_2001-01-01_to_2020-12-31-0000001536-0000000000.tif", 
+                          proxy = F) 
+tmp4 <- stars::read_stars("../data_general/MCD43/MCD43A4_nir_red_median_500m_SE_coastal_MonMean_maskNonForest_2001-01-01_to_2020-12-31-0000001536-0000001536.tif", 
+                          proxy = F) 
+gc(full=TRUE)
+
 tmp1_fire <- read_stars("../data_general/MCD64/MCD64_500m_SE_coastal_2000-11-01_2020-11-01.tif", 
                         proxy=TRUE) %>% 
   set_names("fire_doy") %>% 
@@ -97,9 +107,12 @@ cci4 <- stars::read_stars("../data_general/MCD43/MOD_CCI_500m_SE_coastal2001-01-
   set_names("cci") %>% 
   as.data.table() %>% 
   .[is.na(cci)==FALSE]; gc(full=TRUE)
+gc(full=TRUE)
 cci <- rbindlist(list(cci1,cci2,cci3,cci4), use.names = TRUE)
+gc(full=TRUE)
 arrow::write_parquet(cci, sink="/home/sami/scratch/mcd43_se_coastal_cci.parquet")
 rm(cci,cci1,cci2,cci3,cci4)
+gc(full=TRUE)
 
 # Import SWIR and Band ------------------------------------------
 swir1 <- stars::read_stars("../data_general/MCD43/MCD43A4_swir_median_500m_SE_coastal_MonMean_maskNonForest_2001-01-01_to_2020-12-31-0000000000-0000000000.tif", 
@@ -175,7 +188,9 @@ b6_4 <- stars::read_stars("../data_general/MCD43/MCD43A4_b6_median_500m_SE_coast
 b6 <- rbindlist(list(b6_1,b6_2,b6_3,b6_4), use.names = TRUE)
 arrow::write_parquet(b6,sink='/home/sami/scratch/mcd43_se_coastal_b6.parquet', 
                      compression = 'snappy')
+gc(full=TRUE)
 rm(b6_1,b6_2,b6_3,b6_4); gc(full=TRUE)
+gc(full=TRUE)
 
 
 # The order of subsequent data imports is to alleviate memory usage
@@ -188,7 +203,7 @@ tmp3 <- stars::read_stars("../data_general/MCD43/MCD43A4_nir_red_median_500m_SE_
                           proxy = F) 
 tmp4 <- stars::read_stars("../data_general/MCD43/MCD43A4_nir_red_median_500m_SE_coastal_MonMean_maskNonForest_2001-01-01_to_2020-12-31-0000001536-0000001536.tif", 
                           proxy = F) 
-gc()
+gc(full=TRUE)
 
 
 # proc nir ------------------------------------------------------
@@ -216,6 +231,7 @@ tmp4_nir <- tmp4 %>%
                     values=seq(ymd("2001-01-01"),to = ymd("2020-12-01"), by='1 month'),
                     names='date') %>% 
   set_names("nir")
+gc(full=TRUE)
 
 
 
@@ -244,13 +260,12 @@ tmp4_red <- tmp4 %>%
                     values=seq(ymd("2001-01-01"),to = ymd("2020-12-01"), by='1 month'),
                     names='date') %>% 
   set_names("red")
+gc(full=TRUE)
 
 
 # cleanup
 rm(tmp1,tmp2,tmp3,tmp4)
-gc()
-
-
+gc(full=TRUE)
 
 
 
@@ -362,9 +377,14 @@ bad_pix <- dat %>% lazy_dt() %>%
 #   coord_sf(xlim = c(140,154),
 #            ylim = c(-40,-25), expand = FALSE)+
 #   scale_fill_gradient2()
-
 dat <- dat[!id %in% bad_pix$id]; gc(full=TRUE)
+
+
+# STAGE 4: Reload and merge datasets ------------------------------------------
 dat <- arrow::read_parquet(file ="/home/sami/scratch/mcd43_se_coastal_nir_red_fire.parquet")
+fire <- arrow::read_parquet(file="/home/sami/scratch/mcd64_se_coastal_fire.parquet")
+dat <- merge(dat,fire,by=c("x","y","date"),all.x=TRUE)
+rm(fire); gc(full=TRUE)
 swir <- arrow::read_parquet(file ="/home/sami/scratch/mcd43_se_coastal_swir.parquet")
 cci <- arrow::read_parquet(file ="/home/sami/scratch/mcd43_se_coastal_cci.parquet")
 swir <- merge(swir,cci,by=c("x","y","date"),all=TRUE)
@@ -372,6 +392,7 @@ rm(cci); gc(full=TRUE)
 dat <- merge(dat,swir,by=c("x","y","date"),all=TRUE)
 rm(swir); gc(full=TRUE)
 dat <- dat %>% mutate(date=as.Date(date))
+dat <- dat[is.na(sndvi)==FALSE]
 arrow::write_parquet(dat,
                      sink="/home/sami/scratch/mcd43_se_coastal_nir_red_fire_cci.parquet", 
                      compression = 'snappy')
@@ -379,34 +400,35 @@ arrow::write_parquet(dat,
 
 
 # STAGE 5: NBR & CCI Anoms -----------------------------------------------------------
+dat <- arrow::read_parquet("/home/sami/scratch/mcd43_se_coastal_nir_red_fire_cci.parquet")
 # calc normalized burn ratio
 dat <- dat %>% lazy_dt() %>% 
   mutate(nbr = (nir-swir)/(nir+swir)) %>%
   as.data.table()
 
 
-# Fn: Smooth CCI with Whittaker filter 
-smooth_cci <- function(din){
-  din <- din[order(date)]
-  cci <- din$cci
-  x1 <- data.table::nafill(cci,type = 'locf')
-  x3 <- phenofit::whit2(x1,lambda = 2)
-  out <- din
-  out$scci <- x3
-  # out$cci <- cci
-  return(out)
-}
-vec_no_cci <- dat %>% lazy_dt() %>% 
-  group_by(id) %>% 
-  summarize(all_na = all(is.na(cci)==TRUE)) %>% 
-  ungroup() %>% 
-  as.data.table()
-vec_no_cci <- vec_no_cci[is.na(id)==FALSE][all_na==FALSE]$id
-# smooth_cci(dat[id==1000]) %>% 
-#   ggplot(data=.,aes(date,cci))+
-#   geom_line()+
-#   geom_line(aes(date,scci),col='red')
-system.time(dat <- dat[id%in%vec_no_cci][,smooth_cci(.SD), by=.(x,y,id)])
+# # Fn: Smooth CCI with Whittaker filter ! BROKEN ATM
+# smooth_cci <- function(din){
+#   din <- din[order(date)]
+#   cci <- din$cci
+#   x1 <- data.table::nafill(cci,type = 'locf')
+#   x3 <- phenofit::whit2(x1,lambda = 2)
+#   out <- din
+#   out$scci <- x3
+#   # out$cci <- cci
+#   return(out)
+# }
+# vec_no_cci <- dat %>% lazy_dt() %>% 
+#   group_by(id) %>% 
+#   summarize(all_na = all(is.na(cci)==TRUE)) %>% 
+#   ungroup() %>% 
+#   as.data.table()
+# vec_no_cci <- vec_no_cci[is.na(id)==FALSE][all_na==FALSE]$id
+# # smooth_cci(dat[id==1000]) %>% 
+# #   ggplot(data=.,aes(date,cci))+
+# #   geom_line()+
+# #   geom_line(aes(date,scci),col='red')
+# system.time(dat <- dat[id%in%vec_no_cci][,smooth_cci(.SD), by=.(x,y,id)])
 
 
 # Calculate anomalies 
@@ -414,12 +436,13 @@ gc(full=TRUE)
 dat_norms <- dat[, `:=`(month = month(date))] %>%
   .[, .(ndvi_u = mean(sndvi, na.rm=TRUE),
         nbr_u = mean(nbr,na.rm=TRUE), 
-        cci_u = mean(scci,na.rm=TRUE),
+        cci_u = mean(cci,na.rm=TRUE),
         ndvi_sd = sd(sndvi, na.rm=TRUE), 
         nbr_sd = sd(nbr,na.rm=TRUE), 
         cci_sd = sd(cci,na.rm=TRUE)),
     keyby = .(x,y,month)]
-dat <- merge(dat, dat_norms, by=c("x","y","month"))
+gc(full=TRUE)
+dat <- merge(dat, dat_norms, by=c("x","y","month"),all.x=TRUE)
 dat <- dat %>% lazy_dt() %>%
   mutate(ndvi_anom = sndvi-ndvi_u, 
          nbr_anom = nbr - nbr_u, 
@@ -430,6 +453,11 @@ dat <- dat %>% lazy_dt() %>%
 gc(full=TRUE)
 dat <- dat[is.na(ndvi_u)==FALSE]
 
-arrow::write_parquet(dat,
-                     sink="/home/sami/scratch/mcd43_se_coastal_nir_red_fire_cci.parquet", 
+arrow::write_parquet(dat[date<=ymd("2011-12-31")],
+                     sink="/home/sami/scratch/mcd43_se_coastal_nir_red_fire_cci_2001-2011.parquet", 
                      compression = 'snappy')
+gc(full=TRUE)
+arrow::write_parquet(dat[date>ymd("2011-12-31")],
+                     sink="/home/sami/scratch/mcd43_se_coastal_nir_red_fire_cci_2012-2020.parquet", 
+                     compression = 'snappy')
+gc(full=TRUE)

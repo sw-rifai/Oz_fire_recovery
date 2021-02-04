@@ -2228,3 +2228,225 @@ sdat[date_first_fire < ymd('2005-01-01')][is.na(ttr)==F]$fire_count[fire_count==
 
 
 sdat[fire_count==1]$date_first_fire %>% min
+
+
+
+junk <- bam(ndvi_anom~s(days_since_fire,bs='cs',k=5)+s(log10(ba_m2),bs='cs',k=5), 
+            data=tmp[days_since_fire <= 2500], 
+            method='fREML', select=TRUE, discrete=TRUE)
+junk <- bam(ndvi_anom~s(days_since_fire,min_nbr_anom,log(ba_m2),k=5),
+            data=tmp[days_since_fire <= 2500], 
+            method='fREML', select=TRUE, discrete=TRUE)
+summary(junk)
+plot(junk)
+pl <- sm(getViz(junk),1) %>% plotSlice(., fix=list('days_since_fire'=c(100,300,900)))
+pl+l_fitRaster()+l_fitContour()+scale_fill_gradient2()
+junk <- bam(ndvi_anom~te(days_since_fire,min_nbr_anom,k=5,by=vc_name),
+            data=tmp[days_since_fire <= 2500], 
+            method='fREML', select=TRUE, discrete=TRUE)
+summary(junk)
+getViz(junk) %>% plot
+
+tmp[is.na(fire_size)==FALSE]
+unique(tmp$id) %in% d_nburns[nburns==1]$id
+tmp[id==39856]$ba_m2
+tmp[id==39856]$fire_size
+tmp[id==39856][is.na(fire_size)==FALSE] %>% ggplot(data=.,aes(date,ndvi_anom))+geom_line()
+tmp[id==39856]$cval
+tmp[id==39856][cval>0] %>% ggplot(data=.,aes(date,ndvi_anom))+geom_line()
+tmp[id==39856][cval>0] %>% ggplot(data=.,aes(date,nbr_anom))+geom_line()
+
+
+aprecip <- read_ncdf("../data_general/clim_grid/awap/AWAP/daily/tmp_2020/precip_total_0.05_2020.nc", 
+                     proxy=F, make_units= F)
+al <- read_ncdf("../data_general/clim_grid/awap/AWAP/daily/tmp_2020/land_fixed_0.05.nc", 
+                proxy=F, make_units= F)
+aprecip <- st_warp(aprecip,dest= al)
+st_crs(aprecip)==st_crs(al)
+aprecip <- aprecip[st_as_sf(al['land']==1)]
+aprecip[,,,1] %>% as_tibble()
+
+
+
+al$land %>% as.vector() %>% hist
+al$land==1
+aprecip <- aprecip[al$land==1]
+
+aprecip[,1:300,1:300,1] %>% plot
+
+# [ ] <-	
+ggplot()+
+  geom_stars(data=aprecip[,,,1])
+  
+
+ggplot()+
+  geom_stars(data=aprecip['precip',al['land']==1,al['land']==1,1])+
+  scale_fill_viridis_c()
+
+aprecip['precip',al['land']==1,al['land']==1,1] %>% 
+  as_tibble()
+
+aprecip[al['land']==1,,,1]
+st_as_sf(al['land']==1)
+
+ggplot()+
+  geom_sf(data=st_as_sf(al['land']==1))+
+  scale_fill_viridis_c()
+
+
+unique(clim[,.(x,y,pet_u)]) %>% ggplot(data=.,aes(x,y,fill=pet_u))+geom_tile()+coord_equal()+scale_fill_viridis_c(na.value='red')
+
+
+unique(clim[,.(x,y,pet_u)])$pet_u %>% is.nan %>% table
+
+
+
+is.na(norms_clim$pet_u) %>% table
+
+clim[date==ymd('2001-01-01')]$pet %>% is.na %>% table
+clim[date==ymd('2001-01-01')] %>% ggplot(data=.,aes(x,y,fill=pet))+geom_tile()+coord_equal()+scale_fill_viridis_c(na.value='red')
+clim[date==ymd('2001-01-01')] %>% ggplot(data=.,aes(x,y,fill=tmax))+geom_tile()+coord_equal()+scale_fill_viridis_c(na.value='red')
+
+clim[(is.na(pet)==FALSE && date <= ymd("2019-12-01"))] %>% 
+  .[date==ymd("2020-12-01")] %>% 
+  ggplot(data=.,aes(x,y,fill=tmax))+geom_tile()+coord_equal()+scale_fill_viridis_c(na.value='red')
+
+clim[date==ymd("2019-01-01")] %>% 
+  ggplot(data=.,aes(x,y,fill=vpd15_anom))+geom_tile()+coord_equal()+scale_fill_viridis_c(na.value='red')
+
+clim[date==ymd("2020-01-01")] %>% 
+  ggplot(data=.,aes(x,y,fill=vpd15_anom_12mo))+geom_tile()+coord_equal()+scale_fill_viridis_c(na.value='red')
+
+
+clim[date==ymd("2019-01-01")][,.(date,id,vpd15,vpd15_anom)]
+clim[date==ymd("2020-01-01")][,.(date,id,vpd15,vpd15_anom)]
+
+clim[date==ymd("2020-01-01")]$id
+
+
+unique(clim[date==ymd("2020-01-01")]$x) %in% unique(clim[date==ymd("2019-01-01")]$x)
+
+tmp <- arrow::read_parquet("/home/sami/scratch/awap_clim_se_coastal.parquet")
+
+
+unique(dat_bs$idx_awap) %in% unique(clim_bs$idx_awap) %>% table
+unique(dat_bs$date) %in% unique(clim_bs$date) %>% table
+
+dat_bs %>% select(ndvi_anom,x,y,)
+
+
+dat[date>=ymd("2019-08-01")]$fire_doy %>% is.na %>% table
+
+
+
+dat %>% sample_n(100000) %>% select(ba_m2,min_nbr_anom) %>% distinct() %>% 
+  ggplot(data=.,aes(log10(ba_m2), min_nbr_anom))+
+  geom_point()+
+  geom_smooth(method='lm')
+
+dat %>% sample_n(100000) %>% select(ba_m2,min_nbr_anom) %>% distinct() %>% 
+  lm(min_nbr_anom~ba_m2, data=.) %>% 
+  summary()
+
+
+microbenchmark::microbenchmark(
+  din[date>=din[fire_doy>0]$date] %>% 
+    .[,`:=`(days_since_fire = as.double(date-din[fire_doy>0]$date))]
+)
+microbenchmark::microbenchmark(
+  {date_fire <- din[fire_doy>0]$date[1]
+  din[date>=date_fire] %>% 
+    .[,`:=`(days_since_fire = as.double(date-date_fire))]}
+)
+
+#__________________________
+din <- dat[id==70]
+din[date>=din[fire_doy>0]$date] %>% 
+  .[,`:=`(days_since_fire = as.double(date-din[fire_doy>0]$date))] %>% head
+
+
+dat2[date==ymd("2020-01-01")] %>% 
+  filter(between(y.x,-39,-36) & between(x.x,147.5,150)) %>%
+  ggplot(data=.,aes(x.x,y.y,fill=tmax_anom_3mo))+
+  geom_tile()+
+  coord_equal()+
+  scale_fill_viridis_c(option='A',end=0.8)+
+  theme_linedraw()
+
+
+dat[date==ymd("2020-01-01")] %>% 
+  filter(between(y,-39,-36) & between(x,147.5,150)) %>%
+  ggplot(data=.,aes(x,y,fill=ndvi_anom))+
+  geom_tile()+
+  coord_equal()+
+  scale_fill_viridis_c(option='A',end=0.8)+
+  theme_linedraw()
+
+
+clim[date==ymd("2020-01-01")] %>% 
+  # filter(between(y.x,-39,-36) & between(x.x,147.5,150)) %>%
+  ggplot(data=.,aes(x,y,fill=tmax_anom_3mo))+
+  geom_tile()+
+  coord_equal()+
+  scale_fill_viridis_c(option='A',end=0.8)+
+  theme_linedraw()
+
+
+
+swir[date==ymd("2020-01-01")] %>% 
+  filter(between(y,-39,-36) & between(x,147.5,150)) %>%
+  ggplot(data=.,aes(x,y,fill=swir))+
+  geom_tile()+
+  coord_equal()+
+  scale_fill_viridis_c(option='A',end=0.8)+
+  theme_linedraw()
+
+cci[date==ymd("2020-01-01")] %>% 
+  filter(between(y,-39,-36) & between(x,147.5,150)) %>%
+  ggplot(data=.,aes(x,y,fill=cci))+
+  geom_tile()+
+  coord_equal()+
+  scale_fill_viridis_c(option='A',end=0.8)+
+  theme_linedraw()
+
+dat[date==ymd("2020-01-01")] %>% 
+  filter(between(y,-39,-36) & between(x,147.5,150)) %>%
+  ggplot(data=.,aes(x,y,fill=nir))+
+  geom_tile()+
+  coord_equal()+
+  scale_fill_viridis_c(option='A',end=0.8)+
+  theme_linedraw()
+
+dat[date==ymd("2020-01-01")][is.na(sndvi)==FALSE] %>% 
+  .[is.na(vc)==F] %>%  
+  .[is.na(ndvi_u)==F] %>% 
+  filter(between(y,-39,-36) & between(x,147.5,150)) %>%
+  ggplot(data=.,aes(x,y,fill=sndvi))+
+  geom_tile()+
+  coord_equal()+
+  scale_fill_viridis_c(option='A',end=0.8)+
+  theme_linedraw()
+dat <- dat[is.na(sndvi)==F]
+
+cci <- arrow::read_parquet("/home/sami/scratch/mcd43_se_coastal_cci.parquet")
+
+dat <- arrow::read_parquet("/home/sami/scratch/mcd43_se_coastal_nir_red_fire_cci.parquet")
+
+
+d_soil %>% 
+  filter(between(y,-39,-36) & between(x,147.5,150)) %>%
+  ggplot(data=.,aes(x,y,fill=ece))+
+  geom_tile()+
+  coord_equal()+
+  scale_fill_viridis_c(option='A',end=0.8)+
+  theme_linedraw()
+dat <- dat[is.na(sndvi)==F]
+
+# Searching for the source of the striping **************************
+# swir OK
+# cci OK - Or is it? Something is messing this up between original cci extraction and smoothing of cci.
+# nir OK
+# red OK
+# ndvi 
+# fire_doy 
+# 
