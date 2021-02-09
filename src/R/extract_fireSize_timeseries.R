@@ -5,19 +5,38 @@ library(dtplyr);
 library(lubridate) # load AFTER data.table
 library(arrow); 
 
-grid <- arrow::read_parquet("/home/sami/scratch/mcd43_se_coastal_nir_red_fire.parquet")
-setDT(grid)
-grid <- grid[date==min(date)] %>% select(x,y,id)
-grid <- st_as_stars(grid)
-st_crs(grid) <- st_crs(4326)
-gc(full=TRUE); 
+
+# STAGE 1: Generate reference grid ---------------------------------------------------
+tmp1 <- stars::read_stars("../data_general/MCD43/MCD43A4_nir_red_median_500m_SE_coastal_MonMean_maskNonForest_2001-01-01_to_2020-12-31-0000000000-0000000000.tif", 
+                          proxy = F, RasterIO=list(bands=1)) %>% set_names("nir")
+tmp2 <- stars::read_stars("../data_general/MCD43/MCD43A4_nir_red_median_500m_SE_coastal_MonMean_maskNonForest_2001-01-01_to_2020-12-31-0000000000-0000001536.tif", 
+                          proxy = F, RasterIO=list(bands=1)) %>% set_names("nir") 
+tmp3 <- stars::read_stars("../data_general/MCD43/MCD43A4_nir_red_median_500m_SE_coastal_MonMean_maskNonForest_2001-01-01_to_2020-12-31-0000001536-0000000000.tif", 
+                          proxy = F, RasterIO=list(bands=1))  %>% set_names("nir")
+tmp4 <- stars::read_stars("../data_general/MCD43/MCD43A4_nir_red_median_500m_SE_coastal_MonMean_maskNonForest_2001-01-01_to_2020-12-31-0000001536-0000001536.tif", 
+                          proxy = F, RasterIO=list(bands=1))  %>% set_names("nir")
+gc(full=TRUE)
+grid <- st_mosaic(tmp1,tmp2,tmp3,tmp4)
+rm(tmp1,tmp2,tmp3,tmp4); gc(full=TRUE)
+
+
+# OLD GRID - don't think it worked
+# grid <- arrow::read_parquet("/home/sami/scratch/mcd43_se_coastal_nir_red_fire.parquet")
+# setDT(grid)
+# grid <- grid[date==min(date)] %>% select(x,y,id)
+# grid <- st_as_stars(grid)
+# st_crs(grid) <- st_crs(4326)
+# gc(full=TRUE); 
+
+
+
 
 cc_area1 <- stars::read_stars("../data_general/Oz_misc_data/conComp_area_labels_mcd64_espg4326_500m_200011_202011-0000000000-0000000000.tif",
                          proxy=FALSE) %>% 
   slice('band', seq(1,by=2,length.out = dim(.)[3]/2)) %>% 
   set_names('ba_m2') %>% 
   st_set_dimensions(., 3, 
-                    values=seq(ymd("2000-11-01"),ymd("2020-11-01"),by='1 month'), 
+                    values=seq(ymd("2000-11-01"),ymd("2020-12-01"),by='1 month'), 
                     names = 'date') %>% 
   st_warp(., dest=grid)
 gc(full=TRUE)
@@ -26,7 +45,7 @@ cc_label1 <- stars::read_stars("../data_general/Oz_misc_data/conComp_area_labels
   slice('band', seq(2,by=2,length.out = dim(.)[3]/2)) %>% 
   set_names('label') %>% 
   st_set_dimensions(., 3, 
-                    values=seq(ymd("2000-11-01"),ymd("2020-11-01"),by='1 month'), 
+                    values=seq(ymd("2000-11-01"),ymd("2020-12-01"),by='1 month'), 
                     names = 'date')%>% 
   st_warp(., dest=grid)
 gc(full=TRUE)
@@ -44,7 +63,7 @@ cc_area2 <- stars::read_stars("../data_general/Oz_misc_data/conComp_area_labels_
   slice('band', seq(1,by=2,length.out = dim(.)[3]/2)) %>% 
   set_names('ba_m2') %>% 
   st_set_dimensions(., 3, 
-                    values=seq(ymd("2000-11-01"),ymd("2020-11-01"),by='1 month'), 
+                    values=seq(ymd("2000-11-01"),ymd("2020-12-01"),by='1 month'), 
                     names = 'date')%>% 
   st_warp(., dest=grid)
 gc(full=TRUE)
@@ -53,7 +72,7 @@ cc_label2 <- stars::read_stars("../data_general/Oz_misc_data/conComp_area_labels
   slice('band', seq(2,by=2,length.out = dim(.)[3]/2)) %>% 
   set_names('label') %>% 
   st_set_dimensions(., 3, 
-                    values=seq(ymd("2000-11-01"),ymd("2020-11-01"),by='1 month'), 
+                    values=seq(ymd("2000-11-01"),ymd("2020-12-01"),by='1 month'), 
                     names = 'date')%>% 
   st_warp(., dest=grid)
 gc(full=TRUE)
@@ -67,7 +86,7 @@ cc_area3 <- stars::read_stars("../data_general/Oz_misc_data/conComp_area_labels_
   slice('band', seq(1,by=2,length.out = dim(.)[3]/2)) %>% 
   set_names('ba_m2') %>% 
   st_set_dimensions(., 3, 
-                    values=seq(ymd("2000-11-01"),ymd("2020-11-01"),by='1 month'), 
+                    values=seq(ymd("2000-11-01"),ymd("2020-12-01"),by='1 month'), 
                     names = 'date')%>% 
   st_warp(., dest=grid)
 
@@ -76,7 +95,7 @@ cc_label3 <- stars::read_stars("../data_general/Oz_misc_data/conComp_area_labels
   slice('band', seq(2,by=2,length.out = dim(.)[3]/2)) %>% 
   set_names('label') %>% 
   st_set_dimensions(., 3, 
-                    values=seq(ymd("2000-11-01"),ymd("2020-11-01"),by='1 month'), 
+                    values=seq(ymd("2000-11-01"),ymd("2020-12-01"),by='1 month'), 
                     names = 'date')%>% 
   st_warp(., dest=grid)
 
@@ -91,7 +110,7 @@ cc_area4 <- stars::read_stars("../data_general/Oz_misc_data/conComp_area_labels_
   slice('band', seq(1,by=2,length.out = dim(.)[3]/2)) %>% 
   set_names('ba_m2') %>% 
   st_set_dimensions(., 3, 
-                    values=seq(ymd("2000-11-01"),ymd("2020-11-01"),by='1 month'), 
+                    values=seq(ymd("2000-11-01"),ymd("2020-12-01"),by='1 month'), 
                     names = 'date')%>% 
   st_warp(., dest=grid)
 
@@ -100,7 +119,7 @@ cc_label4 <- stars::read_stars("../data_general/Oz_misc_data/conComp_area_labels
   slice('band', seq(2,by=2,length.out = dim(.)[3]/2)) %>% 
   set_names('label') %>% 
   st_set_dimensions(., 3, 
-                    values=seq(ymd("2000-11-01"),ymd("2020-11-01"),by='1 month'), 
+                    values=seq(ymd("2000-11-01"),ymd("2020-12-01"),by='1 month'), 
                     names = 'date')%>% 
   st_warp(., dest=grid)
 cc4 <- c(cc_area4,cc_label4) %>% as_tibble() %>% filter(is.na(ba_m2)==FALSE)

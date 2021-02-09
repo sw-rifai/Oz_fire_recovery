@@ -16,15 +16,17 @@ oz_poly <- sf::read_sf("../data_general/Oz_misc_data/gadm36_AUS_shp/gadm36_AUS_1
   select(NAME_1)
 
 
-dat <- arrow::read_parquet(file="/home/sami/scratch/mcd43_se_coastal_nir_red_fire_cci.parquet")
+dat <- arrow::read_parquet(file="/home/sami/scratch/mcd43_se_coastal_nir_red_fire_cci_2001-2011.parquet")
 coords_vi <- lazy_dt(dat) %>% select(x,y,id) %>% distinct() %>% as.data.table()
 coords_vi <- st_as_sf(coords_vi, coords = c("x","y"))
 st_crs(coords_vi) <- st_crs(4326)
-
+coords_stars <- st_as_stars(coords_vi)
 
 # proc nvis -----------------------------------------------------
 nvis <- read_stars("../data_general/NVIS/nvis51_majorVegClass_0p05.tif") %>% 
   set_names('vc')
+dem <- stars::read_stars("../data_general/Oz_misc_data/DEM-H_500m_SE_coastal.tif")
+nvis <- st_warp(nvis,dest=dem)
 tmp <- st_extract(nvis, coords_vi)
 codes <- readr::read_fwf("../data_general/NVIS/nvis51_majorVegClass_codes.txt",
                          fwf_widths(c(2,100)), skip = 1) %>%
@@ -67,7 +69,7 @@ names_soil <- raster::stack("../data_general/Oz_misc_data/SLGA_500m_SE_coastal.t
   names()
 soil <- read_stars("../data_general/Oz_misc_data/SLGA_500m_SE_coastal.tif",
                    proxy=FALSE) %>% 
-  st_set_dimensions(.,3,values=names_slga)
+  st_set_dimensions(.,3,values=names_soil)
 # der <- st_extract(soil[,,,str_which(names_soil,'DER_DER_000_999_EV')],coords_vi)
 # des <- st_extract(soil[,,,str_which(names_soil,'DES_DES_000_200_EV')],coords_vi)
 

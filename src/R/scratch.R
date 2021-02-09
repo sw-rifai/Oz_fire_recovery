@@ -2417,8 +2417,8 @@ dat[date==ymd("2020-01-01")] %>%
   scale_fill_viridis_c(option='A',end=0.8)+
   theme_linedraw()
 
-dat[date==ymd("2020-01-01")][is.na(sndvi)==FALSE] %>% 
-  .[is.na(vc)==F] %>%  
+dat[date==ymd("2001-01-01")][is.na(sndvi)==FALSE] %>% 
+  # .[is.na(vc)==F] %>%  
   .[is.na(ndvi_u)==F] %>% 
   filter(between(y,-39,-36) & between(x,147.5,150)) %>%
   ggplot(data=.,aes(x,y,fill=sndvi))+
@@ -2442,6 +2442,24 @@ d_soil %>%
   theme_linedraw()
 dat <- dat[is.na(sndvi)==F]
 
+coords_vi %>% 
+  mutate(x=st_coordinates(.)[,'X'], 
+         y=st_coordinates(.)[,'Y']) %>% 
+  as_tibble() %>% 
+  filter(between(y,-39,-36) & between(x,147.5,150)) %>%
+  ggplot(data=.,aes(x,y,fill=factor(vc)))+
+  geom_tile()+
+  coord_equal()
+
+clim %>% 
+  filter(date==ymd("2017-01-01")) %>% 
+  filter(between(y,-39,-36) & between(x,147.5,150)) %>%
+  ggplot(data=.,aes(x,y,fill=vpd15_anom))+
+  geom_tile()+
+  coord_equal()+
+  scale_fill_viridis_c(option='A',end=0.8,limits=c(-0.5,0.5))+
+  theme_linedraw()
+
 # Searching for the source of the striping **************************
 # swir OK
 # cci OK - Or is it? Something is messing this up between original cci extraction and smoothing of cci.
@@ -2450,3 +2468,285 @@ dat <- dat[is.na(sndvi)==F]
 # ndvi 
 # fire_doy 
 # 
+
+
+
+m_bc3 <- bam(ndvi_anom~
+               s(log(ba_m2),k=3)+
+               s(days_since_fire,min_nbr_anom,k=5)+
+               s(vpd15_anom, vpd15_anom_3mo,k=5)+
+               te(month, vpd15_anom_12mo, k=5, bs='cs')+
+               te(precip_anom_12mo,map,bs='cs',k=5),
+             data=dat1[days_since_fire <= 500][date<=ymd("2019-08-01")], 
+             method='fREML', select=TRUE, discrete=TRUE)
+
+
+# merge(dat[date==ymd('2019-05-01')], coords_vi, by='id') %>% 
+tmp1[date==ymd('2020-01-01')] %>% 
+  filter(between(y,-39,-36) & between(x,147.5,150)) %>%
+  ggplot(data=.,aes(x,y,fill=ndvi_anom))+
+  geom_tile()+
+  coord_equal()+
+  scale_fill_viridis_c(option='A',end=0.8)+
+  theme_linedraw()
+
+cc %>% 
+  filter(between(y,-39,-36) & between(x,147.5,150)) %>%
+  ggplot(data=.,aes(x,y,fill=id))+
+  geom_tile()+
+  coord_equal()+
+  scale_fill_viridis_c(option='A',end=0.8)+
+  theme_linedraw()
+
+
+
+merge(cc_area1, cc_area2)
+
+a1 <- cc_area1[,1:100,1:100,1]
+a2 <- cc_area1[,101:201,1:100,1]
+
+ggplot()+
+  geom_stars(data=grid)+
+  geom_stars(data=a1,fill='blue')+
+  geom_stars(data=a2,fill='red')
+
+c(a1,a2,along=c("x","y"))
+st_mosaic(a1,a2)
+
+
+stars::as.tbl_cube.stars(a1)
+
+library(terra)
+cc1 <- terra::rast("../data_general/Oz_misc_data/conComp_area_labels_mcd64_espg4326_500m_200011_202011-0000000000-0000000000.tif")
+cc2 <- terra::rast("../data_general/Oz_misc_data/conComp_area_labels_mcd64_espg4326_500m_200011_202011-0000000000-0000000000.tif")
+full <- raster::merge(cc1,cc2)
+
+plot(full[[1]])
+dim(full)
+selectRange(full,z=1)
+
+
+
+
+arrow::codec_is_available('gzip')
+system("echo $LIBARROW_MINIMAL")
+system('echo $LIBARROW_MINIMAL')
+system('export LIBARROW_MINIMAL=false')
+system('NOT_CRAN=true')
+system('echo $NOT_CRAN')
+
+arrow::install_arrow()
+
+
+Sys.setenv(LIBARROW_MINIMAL=TRUE)
+Sys.getenv('LIBARROW_MINIMAL')
+arrow::install_arrow()
+
+arrow::codec_is_available('snappy')
+
+
+arrow::install_arrow(
+  nightly = FALSE,
+  binary = Sys.getenv("LIBARROW_BINARY", 'ubuntu-18.04'),
+  use_system = Sys.getenv("ARROW_USE_PKG_CONFIG", TRUE),
+  minimal = Sys.getenv("LIBARROW_MINIMAL", FALSE),
+  verbose = Sys.getenv("ARROW_R_DEV", FALSE),
+  repos = getOption("repos")
+)
+arrow::codec_is_available('snappy')
+
+
+library(arrow)
+codec_is_available('snappy')
+read_parquet("/home/sami/scratch/mcd43_se_coastal_b6.parquet")
+
+
+Sys.setenv(ARROW_S3="ON")
+Sys.setenv(NOT_CRAN="true")
+install.packages("arrow", repos = "https://arrow-r-nightly.s3.amazonaws.com")
+
+
+
+
+dat[date==ymd("2019-11-01") & is.na(fire_doy)==F] %>% dim
+dat[date==ymd("2019-11-01") & is.na(fire_doy)==F] %>% unique() %>% dim
+junk <- dat[date==ymd("2019-11-01") & is.na(fire_doy)==F][,.(x,y,date,id,idx_awap,sndvi)][1:4,]
+junk %>% distinct()
+unique(junk)
+
+dim(tmp)
+dim(dat)
+dat[,.(x,y,id,date,ndvi_anom)] %>% dim
+unique(dat[,.(x,y,id,date,ndvi_anom)]) %>% dim
+
+table(is.na(dat$idx_awap))
+
+
+dat[id==1115]$fire_doy
+tmp_fire
+
+tmp_fire %>% 
+  lazy_dt() %>% 
+  group_by(x,y) %>% 
+  summarize(nburns = sum(fire_doy>0,na.rm=TRUE)) %>% 
+  ungroup() %>% as_tibble() %>% pull(nburns)
+
+st_get_dimension_values(tmp1_fire,3)
+ggplot()+
+  geom_stars(data=tmp1_fire[,,,230])+
+  scale_color_viridis_c(limits=c(0,365))
+
+ggplot()+
+  geom_stars(data=tmp4_fire[,,,230])+
+  scale_color_viridis_c(limits=c(0,365))
+
+
+dat[,.(fire_doy.x,fire_doy.y)][is.na(fire_doy.y)==F]
+dat <- dat %>% select(-fire_doy.x)
+dat <- dat %>% rename(fire_doy=fire_doy.y)
+
+
+
+clim %>% 
+  filter(date==ymd("2017-01-01")) %>% 
+  filter(between(y,-39,-36) & between(x,147.5,150)) %>%
+  ggplot(data=.,aes(x,y,fill=vpd15_anom))+
+  geom_tile()+
+  coord_equal()+
+  scale_fill_viridis_c(option='A',end=0.8,limits=c(-0.5,0.5))+
+  theme_linedraw()
+
+dat[is.na(idx_awap)==F] %>% 
+  filter(date==ymd("2017-01-01")) %>% 
+  filter(between(y,-39,-36) & between(x,147.5,150)) %>%
+  ggplot(data=.,aes(x,y,fill=ndvi_anom))+
+  geom_tile()+
+  coord_equal()+
+  scale_fill_viridis_c(option='A',end=0.8,limits=c(-0.5,0.5))+
+  theme_linedraw()
+
+
+fire <- arrow::read_parquet(file="/home/sami/scratch/mcd64_se_coastal_fire.parquet")
+
+fire %>% lazy_dt() %>%
+  filter(is.na(fire_doy)==FALSE) %>% 
+  filter(fire_doy>0) %>% 
+  group_by(x,y) %>%
+  summarize(nburns = n()) %>%
+  as.data.table() %>% 
+  pull(nburns) %>% 
+  table
+
+dat %>% lazy_dt() %>%
+  filter(is.na(fire_doy)==FALSE) %>% 
+  filter(fire_doy>0) %>% 
+  group_by(x,y) %>%
+  summarize(nburns = sum(fire_doy>0)) %>%
+  as.data.table() %>% 
+  pull(nburns) %>% 
+  table
+
+dat[is.na(fire_doy)==FALSE][fire_doy>0]$fire_doy %>% sum
+fire$fire_doy %>% sum
+
+dat[]
+
+
+dim(fire)[1]
+dim(dat)[1]
+
+
+dim(fire)
+distinct(fire) %>% dim
+fire %>% select(x,y,date) %>% dim
+dat[is.na(fire_doy)==F][fire_doy>0][,.(x,y,date,fire_doy)]
+dat[,.(x,y,date)] %>% dim
+unique(dat[,.(x,y,date)]) %>% dim
+dat[is.na(fire_doy)==F]
+dat[id==70]$fire_doy
+fire[near(x,143.0051,tol = 0.001)==TRUE][near(y,-38.49056,tol=0.001)]
+dat[id==70 & date==ymd("2005-03-01")] %>% select(-sndvi) %>%  distinct()
+dat[id==70 & date==ymd("2005-03-01")] %>%  distinct()
+
+
+dat1$id
+dat1[id==1587] %>% 
+  ggplot(data=.,aes(date,ndvi_anom))+
+  geom_line()+
+  geom_point()
+
+cc[id==1587]
+
+cc[near(x,(dat1[id==1587]$x[1]),tol=0.1)==TRUE]
+
+cc[near(x,(152.94),tol=0.1)==TRUE]
+
+unique(cc$label) %>% length
+dim(cc)
+
+p <- dat[id==1587][,.(x,y,id)] %>% unique
+p2 <- dat[id==1042585][,.(x,y,id)] %>% unique
+
+cc[p,on=c("x","y"),roll=TRUE]
+p[cc,on=c("x","y"),roll=TRUE] %>% .[is.na(id)==F]
+
+cc[near(x,p$x,tol=1)==T]
+cc$x %>% unique %>% sort
+
+
+unique(dat[,.(x,y)]) %>% 
+  ggplot(data=.,aes(x,y))+
+  geom_tile()+
+  geom_point(data=p, aes(x,y),col='red')+
+  coord_equal()
+
+
+ggplot(data=cc,aes(x,y))+
+  geom_tile()+
+  geom_point(data=p, aes(x,y),col='red')+
+  coord_equal()
+
+
+unique(dat1$id) %in% unique(cc$id) %>% table
+
+cc[dat1]
+
+dat1 %>% 
+  sample_n(10000) %>% 
+  filter(days_since_fire <= 500) %>% 
+  ggplot(data=.,aes(min_nbr_anom/days_since_fire, ndvi_anom,color=days_since_fire))+
+  geom_point()+
+  scale_color_viridis_c()
+
+min(dat1$min_nbr_anom)
+dat1 %>% 
+  sample_n(10000) %>% 
+  filter(days_since_fire <= 500) %>% 
+  # filter(days_since_fire >= 30) %>% 
+  ggplot(data=.,aes( (-(min_nbr_anom/-1.3)+(days_since_fire/500))/((min_nbr_anom/-1.3)+(days_since_fire/500)) , 
+                     ndvi_anom,color=min_nbr_anom))+
+  geom_point()+
+  geom_smooth()+
+  scale_color_viridis_c()
+
+
+dat1 %>% select(-idx_awap,-date,-id,-x.x,-y.x,-x.y,-y.y,-fire_doy,-vc, 
+                -ndvi,-sndvi,-nbr) %>% 
+  sample_n(10000) %>% 
+  drop_na()
+r1 <- ranger(ndvi_anom~., 
+             data=dat1 %>% select(-idx_awap,-date,-id,-x.x,-y.x,-x.y,-y.y,-fire_doy,-vc, 
+                                  -ndvi,-sndvi,-nbr,-label,-year, 
+                                  -nbr_anom, -days_since_fire, 
+                                  -pet_anom_12mo, -vpd15_12mo, 
+                                  -date_fire1, -min_nbr_anom) %>% 
+               sample_n(100000) %>% 
+               drop_na(), 
+             importance='impurity_corrected'
+)
+
+library(vip)
+vip(r1)
+r1
+
+
