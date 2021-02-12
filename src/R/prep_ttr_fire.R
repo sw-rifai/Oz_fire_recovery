@@ -10,21 +10,26 @@ setDTthreads(threads = 16)
 # Isolate slow recovering pixels --------------------------------
 load("outputs/pixel_vegClass_groups.rds")
 d_soil <- read_parquet("../data_general/Oz_misc_data/landscape_covariates_se_coastal.parquet")
-d_soil <- d_soil[order(id)]
+d_soil <- d_soil[order(id)]; gc(full=TRUE)
 tmp1 <- arrow::read_parquet("/home/sami/scratch/mcd43_se_coastal_nir_red_fire_cci_2001-2011.parquet")
+gc(full=TRUE)
 tmp2 <- arrow::read_parquet("/home/sami/scratch/mcd43_se_coastal_nir_red_fire_cci_2012-2020.parquet")
+gc(full=TRUE)
 dat <- rbindlist(list(tmp1,tmp2),use.names=TRUE)
 rm(tmp1,tmp2); gc(full=TRUE)
-dat <- dat[order(x,y,date)][,ndvi_anom_3mo := frollmean(ndvi_anom,
+
+dat <- dat[,.(x,y,date,id,ndvi,sndvi,ndvi_u,ndvi_sd, nbr,nbr_u,fire_doy)]
+gc()
+dat <- dat[order(x,y,date)][,`:=`(ndvi_anom=sndvi-ndvi_u)][,ndvi_anom_3mo := frollmean(ndvi_anom,
                                     n = 3,fill = NA,align='right'), 
                             by=.(x,y)]
+dat[,`:=`(ndvi_anom_sd_3mo = ndvi_anom_3mo/ndvi_sd)]
 gc(full=TRUE)
 
 
 gc(full=TRUE)
 dat <- dat[order(id,date)]
 gc(full=TRUE)
-dat <- dat[,.(x,y,date,id,ndvi,ndvi_anom_3mo,sndvi,ndvi_u,nbr,nbr_u,fire_doy)]
 gc(full=TRUE)
 dat <- merge(dat,d_soil, by='id',all.x = TRUE)
 gc(full=TRUE)
@@ -181,10 +186,10 @@ fn_min <- function(x){
   return(out)}
 gc(full=TRUE)
 tmp_ttr1 <- dat1 %>% 
-  .[,.(ttr = fn_min(.SD[days_since_fire>0][ndvi_anom_3mo>0]$days_since_fire) ),
+  .[,.(ttr = fn_min(.SD[days_since_fire>0][ndvi_anom_sd_3mo>0]$days_since_fire) ),
     keyby=.(x,y,id)]
 gc(full=TRUE)
-dat1 <- dat1[days_since_fire>=0]
+dat1 <- dat1[days_since_fire>= -366]
 gc(full=TRUE)
 dat1 <- merge(dat1,tmp_ttr1,by=c('x','y','id'))
 gc(full=TRUE)
@@ -239,10 +244,10 @@ fn_min <- function(x){
   return(out)}
 gc(full=TRUE)
 tmp_ttr1 <- dat2 %>% 
-  .[,.(ttr = fn_min(.SD[days_since_fire>0][ndvi_anom_3mo>0]$days_since_fire) ),
+  .[,.(ttr = fn_min(.SD[days_since_fire>0][ndvi_anom_sd_3mo>0]$days_since_fire) ),
     keyby=.(x,y,id)]
 gc(full=TRUE)
-dat2 <- dat2[days_since_fire>=0]
+dat2 <- dat2[days_since_fire>= -366]
 gc(full=TRUE)
 dat2 <- merge(dat2,tmp_ttr1,by=c('x','y','id'))
 gc(full=TRUE)

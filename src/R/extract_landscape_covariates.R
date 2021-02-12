@@ -8,7 +8,7 @@ library(dtplyr);
 library(lubridate) # LAST to load
 library(RcppArmadillo)
 library(arrow)
-source("src/R/functions_time_to_recover.R")
+# source("src/R/functions_time_to_recover.R")
 
 # Load data ---------------------------------------------------------------
 oz_poly <- sf::read_sf("../data_general/Oz_misc_data/gadm36_AUS_shp/gadm36_AUS_1.shp") %>% 
@@ -57,6 +57,21 @@ dem <- st_extract(tmp, coords_vi)
 dem$id <- coords_vi$id
 dem <- as.data.table(dem) %>% select(-geometry)
 
+# proc slope ------------------------------------------------
+tmp <- read_stars("../data_general/Oz_misc_data/slope_wwfhydrosheds_500m_SE_coastal.tif") %>% 
+  set_names('slope')
+slope <- st_extract(tmp, coords_vi)
+slope$id <- coords_vi$id
+slope <- as.data.table(slope) %>% select(-geometry)
+
+# proc aspect ------------------------------------------------
+tmp <- read_stars("../data_general/Oz_misc_data/aspect_wwfhydrosheds_500m_SE_coastal.tif") %>% 
+  set_names('aspect')
+aspect <- st_extract(tmp, coords_vi)
+aspect$id <- coords_vi$id
+aspect <- as.data.table(aspect) %>% select(-geometry)
+
+
 # proc TPI ------------------------------------------------
 tmp <- read_stars("../data_general/Oz_misc_data/mtpi_alos_500m_SE_coastal.tif") %>% 
   set_names('tpi')
@@ -103,33 +118,15 @@ d_soil$id <- coords_vi$id
 d_soil <- d_soil %>% st_drop_geometry()
 d_soil <- d_soil %>% as.data.table()
 
+
+
+
 tmp1 <- merge(nvis,dem,by='id')
+tmp1_1 <- merge(slope,aspect,by='id')
+tmp1 <- merge(tmp1,tmp1_1,by='id'); rm(tmp1_1); gc(full=TRUE)
 tmp2 <- merge(tmp1,tpi,by='id')
 tmp3 <- merge(tmp2, d_soil, by='id')
 write_parquet(tmp3, sink='../data_general/Oz_misc_data/landscape_covariates_se_coastal.parquet')
 
 
 
-# soil[,,,str_which(names_soil,"PH_")]
-# 
-# plot(pto, col=viridis::inferno(100),breaks='equal')
-# 
-# names_soil[str_detect(names_soil,"PTO_")]
-# 
-# 
-# des %>% plot
-# tmp <- st_extract(soil, coords_vi)
-# as.data.table(tmp)
-# 
-# st_as_stars(tmp)
-# slga$id <- coords_vi$id
-# slga <- as.data.table(slga) %>% select(-geometry)
-# 
-# 
-# coords_vi["vc_name"] %>% plot
-# coords_vi$vc_name %>% table %>% as_tibble() %>% arrange(desc(n))
-# coords_vi %>% ggplot(data=.,aes(vc_name,fill=vc_name))+
-#   stat_count()+
-#   scale_x_discrete(guide=guide_axis(check.overlap = TRUE))
-# 
-# 

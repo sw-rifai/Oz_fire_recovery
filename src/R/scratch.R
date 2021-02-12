@@ -2740,13 +2740,136 @@ r1 <- ranger(ndvi_anom~.,
                                   -nbr_anom, -days_since_fire, 
                                   -pet_anom_12mo, -vpd15_12mo, 
                                   -date_fire1, -min_nbr_anom) %>% 
-               sample_n(100000) %>% 
+               sample_n(10000) %>% 
                drop_na(), 
              importance='impurity_corrected'
 )
 
 library(vip)
-vip(r1)
+vip(r1,num_features = 40)
 r1
 
 
+dat1[id==1115] %>% 
+  ggplot(data=.,aes(date,ndvi_anom))+
+  geom_line()
+
+
+merge(unique(dat1[,.(id,elevation,tpi,
+                     min_nbr_anom,vc_name)]),tmp_ttr1,by='id') %>% 
+  sample_n(10000) %>% 
+  ggplot(data=.,aes(min_nbr_anom, ttr,color=tpi))+
+  geom_point()+
+  geom_smooth()+
+  scale_color_gradient2()+
+  facet_wrap(~vc_name)
+
+merge(unique(dat1[,.(id,date_fire1,ba_m2, 
+                     elevation,tpi,
+                     min_nbr_anom,vc_name, 
+                     pto,sand,pH,awc,ece, 
+                     der,des)]),tmp_ttr1,by='id') %>% 
+  mutate(month = month(date_fire1)) %>% 
+  filter(month %in% c(9,10,11,12,1)) %>%
+  lm(ttr~scale(elevation)+
+       scale(min_nbr_anom)+scale(log(ba_m2))+
+       vc_name+
+       scale(pto)+scale(sand)+scale(pH)+scale(awc)+scale(der),data=.) %>% 
+  summary
+
+dat1 %>% mutate(month=month(date_fire1)) %>% pull(month) %>% hist
+
+
+dat1 %>% lm(ttr~scale(elevation)+
+     scale(min_nbr_anom)+scale(log(ba_m2))+
+     vc_name+
+     scale(pto)+scale(sand)+scale(pH)+scale(awc)+scale(der),data=.) %>% 
+  summary
+
+
+dat1[month %in% c(9,10,11,12,1)][days_since_fire==ttr] %>% 
+  lm(ttr~scale(elevation)+
+       scale(min_nbr_anom)+scale(log(ba_m2))+
+       vc_name+
+       scale(pto)+scale(sand)+scale(pH)+scale(awc)+scale(der),data=.) %>% 
+  summary
+
+
+gc()
+merge(dat2,cc[,.(ba_m2,label,id)],by=c("id"),all.x = TRUE,allow.cartesian = TRUE) %>% names
+
+
+
+
+clim %>% lazy_dt() %>% 
+  group_by(date) %>% 
+  summarize(val = mean(precip_anom_3mo,na.rm=TRUE)) %>% 
+  ungroup() %>% 
+  as_tibble() %>% 
+  ggplot(data=.,aes(date,val))+
+  geom_line()
+
+
+clim <- aprecip
+
+p1 <- st_apply(clim["precip"],1:2,mean,na.rm=TRUE)
+p2 <- st_apply(mv20["precip"],1:2,mean,na.rm=TRUE)
+
+ggplot()+
+  geom_stars(data=p2-p1)+
+  scale_fill_gradient2(limits=c(-50,50))
+
+tmp <- rbindlist(list(as.data.table(clim["precip"]) %>% set_names(c("x","y","date","precip")) %>% 
+                        units::drop_units() %>% 
+                        mutate(date=as.Date(date)), 
+               as.data.table(mv20["precip"]) %>% set_names(c("x","y","date","precip"))),
+               use.names = TRUE)
+
+tmp[date==ymd("2020-01-01")] %>% ggplot(data=.,aes(x,y,fill=precip))+
+  geom_tile()+scale_fill_viridis_c()
+
+
+good_pix <- tmp %>% lazy_dt() %>% 
+  filter(date>=ymd("2020-01-01")) %>% 
+  group_by(x,y) %>% 
+  summarize(val = mean(precip,na.rm=TRUE)) %>% 
+  ungroup() %>% 
+  as.data.table() %>% 
+  .[val >= 0.1]
+
+tmp <- left_join(good_pix[,.(x,y)],tmp)
+
+tmp %>% lazy_dt() %>% 
+  filter(date>=ymd("2020-01-01")) %>% 
+  group_by(x,y) %>% 
+  summarize(val = mean(precip,na.rm=TRUE)) %>% 
+  ungroup() %>% 
+  as_tibble() %>% 
+  ggplot(data=.,aes(x,y,fill=val))+
+  geom_tile()+
+  scale_fill_viridis_c(limits=c(1,500))
+
+
+tmp %>% lazy_dt() %>% 
+  group_by(date) %>% 
+  summarize(val = mean(precip,na.rm=TRUE)) %>% 
+  ungroup() %>% 
+  as_tibble() %>% 
+  ggplot(data=.,aes(date,val))+
+  geom_line()+
+  geom_smooth(span=0.1)
+
+
+
+dat1 %>% select(delta_ndvi, min_nbr_anom) %>% cor
+
+
+
+getViz(nc_1) %>% plot(allTerms=TRUE) %>% print(pages=1)
+
+
+getViz(nc_1) %>% plot(allTerms=TRUE)+scale_fill_gradient2()
+
+
+getViz(nc_1) %>% sm(., 8) %>% plot()+l_fitRaster()+
+  l_fitContour()+scale_fill_gradient2()
