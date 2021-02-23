@@ -2873,3 +2873,82 @@ getViz(nc_1) %>% plot(allTerms=TRUE)+scale_fill_gradient2()
 
 getViz(nc_1) %>% sm(., 8) %>% plot()+l_fitRaster()+
   l_fitContour()+scale_fill_gradient2()
+
+
+
+
+
+
+dry_ttr0 %>% 
+  ggplot(data=.,aes(x,y,fill=ttr))+
+  geom_tile()+
+  coord_equal()+
+  scale_fill_viridis_c(option='B',limit=c(0,1500))
+
+
+
+
+# Description: Tabulate NVIS class burn proportion through time -----------------------------
+library(tidyverse);
+library(stars); library(sf)
+library(data.table); 
+library(dtplyr); 
+library(lubridate) # load AFTER data.table
+library(RcppArmadillo)
+library(arrow); 
+# setDTthreads(threads = 16)
+
+# Isolate slow recovering pixels --------------------------------
+load("outputs/pixel_vegClass_groups.rds")
+d_soil <- read_parquet("../data_general/Oz_misc_data/landscape_covariates_se_coastal.parquet")
+d_soil <- d_soil[order(id)]; gc(full=TRUE)
+tmp1 <- arrow::read_parquet("/home/sami/scratch/mcd43_se_coastal_nir_red_fire_cci_2001-2011.parquet")
+gc(full=TRUE)
+tmp2 <- arrow::read_parquet("/home/sami/scratch/mcd43_se_coastal_nir_red_fire_cci_2012-2020.parquet")
+gc(full=TRUE)
+dat <- rbindlist(list(tmp1,tmp2),use.names=TRUE)
+rm(tmp1,tmp2); gc(full=TRUE)
+dat <- dat[is.na(fire_doy)==FALSE]
+dat <- merge(dat,d_soil,by='id')
+dat %>% 
+  mutate(fire_year = year(date-months(2))) %>% 
+  filter(vc<11) %>% 
+  filter(vc %in% c(2:8)) %>% 
+  filter(fire_year<2020) %>% 
+  filter(vc2 %in% c(4,60,8,5,3,9,59,54,98,12,30,2,6)) %>% 
+  ggplot(data=.,aes(fire_year,fill=factor(vc2_name)))+
+  geom_bar(na.rm=TRUE)+
+  scico::scale_fill_scico_d()
+
+dat[vc==25]$vc_name %>% unique
+unique(dat[,.(vc,vc_name)]) %>% arrange(vc)
+dat %>% 
+  mutate(fire_year = year(date-months(2))) %>% 
+  filter(vc<11) %>% 
+  filter(vc %in% c(2:8)) %>% 
+  filter(fire_year<2020) %>% 
+  group_by(vc2) %>% 
+  summarize(count = n()) %>% 
+  arrange(desc(count))
+
+
+dat %>% 
+  mutate(fire_year = year(date-months(2))) %>% 
+  filter(vc<11) %>% 
+  filter(vc %in% c(2:8)) %>% 
+  filter(fire_year<2020) %>% 
+  filter(vc2 %in% c(4,60,8,5,3,9,59,54,98,12,30,2,6)) %>% 
+  ggplot(data=.,aes(fire_year,..count.., color=factor(vc2_name)))+
+  geom_point()
+  # stat_summary(fun='count',geom='point')
+
+
+dat %>% 
+  mutate(fire_year = year(date-months(2))) %>% 
+  filter(vc<11) %>% 
+  filter(vc %in% c(2:8)) %>% 
+  filter(fire_year<2020) %>% 
+  filter(vc2 %in% c(4,60,8,5,3,9,59,54,98,12,30,2,6)) %>% 
+  ggplot(data=.,aes(fire_year,..count.., color=factor(vc2_name)))+
+  stat_count()
+  

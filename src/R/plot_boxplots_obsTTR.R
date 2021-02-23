@@ -5,14 +5,14 @@ library(tidyverse);
 library(lubridate); 
 library(arrow);
 tmp1 <- arrow::read_parquet("/home/sami/scratch/mcd43_se_coastal_nir_red_fire_cci_2001-2011.parquet", 
-                            col_select = c("x","y","id","date","sndvi","ndvi_anom","fire_doy",
-                                           "nbr_anom",
-                                           "ndvi_u","ndvi_sd","ndvi_anom_sd"))
+                col_select = c("x","y","id","date","sndvi","ndvi_anom","fire_doy",
+                               "nbr_anom",
+                               "ndvi_u","ndvi_sd","ndvi_anom_sd"))
 gc(full=T)
 tmp2 <- arrow::read_parquet("/home/sami/scratch/mcd43_se_coastal_nir_red_fire_cci_2012-2020.parquet",
-                            col_select = c("x","y","id","date","sndvi","ndvi_anom","fire_doy",
-                                           "nbr_anom",
-                                           "ndvi_u","ndvi_sd","ndvi_anom_sd"))
+                col_select = c("x","y","id","date","sndvi","ndvi_anom","fire_doy",
+                               "nbr_anom",
+                               "ndvi_u","ndvi_sd","ndvi_anom_sd"))
 gc(full=T)
 dat <- rbindlist(list(tmp1,tmp2),use.names=TRUE); gc(full=TRUE)
 rm(tmp1,tmp2); gc(full=TRUE)
@@ -331,7 +331,6 @@ tmp_p <- tmp_p %>% mutate(fire_month = month(date_fire1)) %>%
   filter(fire_year <= 2017) %>% 
   as.data.table()
   
-
 id_nofire <- dat %>% 
   lazy_dt() %>%
   filter(date < ymd("2019-08-01")) %>% 
