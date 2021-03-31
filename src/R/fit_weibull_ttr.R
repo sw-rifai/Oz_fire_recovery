@@ -19,7 +19,8 @@ dat <- arrow::read_parquet("/home/sami/scratch/mcd43_se_coastal_nir_red_fire_cci
 # ss <- sdat[date_first_fire < ymd('2005-01-01')][is.na(ttr)==F][fire_count==1]
 
 sdat <- read_parquet("outputs/linear_ttr_multiBurns_2001-2020_2021-01-20.parquet")
-sdat <- sdat[fire_count==1][is.na(ttr)==FALSE][date_first_fire<ymd('2015-01-01')][ttr>100]
+#! Only fitting locations where the recovery was at least one year
+sdat <- sdat[fire_count==1][is.na(ttr)==FALSE][date_first_fire<ymd('2015-01-01')][ttr>=365]
 ssdat <- dat[id%in%sdat$id]
 ssdat <- merge(ssdat, 
                sdat[,.(x,y,id,date_first_fire,recovery_date,ttr)], 
@@ -29,23 +30,13 @@ mdat <- ssdat %>%
   lazy_dt() %>% 
   group_by(x,y,id) %>% 
   filter(date > date_first_fire) %>% 
-  filter(date <= recovery_date) %>% 
+  filter(date <= recovery_date+days(365)) %>% 
   ungroup() %>% 
   as.data.table() 
 
 mdat <- mdat %>% lazy_dt() %>% 
   mutate(post_days = as.double(date - date_first_fire)) %>% 
   as.data.table()
-
-junk <- mdat %>% lazy_dt() %>% group_by(id) %>% summarize(val = sum(post_days>30,na.rm=TRUE)) %>% 
-  as.data.table()
-junk[val==3]
-
-mdat[id%in%junk[val==3]$id][,{setTxtProgressBar(pb, .GRP); fn_w(.SD)}, by=.(x,y,id)]
-for(idx in 1:length(junk[val==3]$id)){
-  fn_w(mdat[id==junk[val==3]$id[idx]])
-}
-junk[val==3]$id[79]
 
 # Weibull form: Asym-Drop*exp(-exp(lrc)*x^pwr)
 # Asym range: 0.01-0.1
@@ -62,7 +53,7 @@ fn_w <- function(din){
                             supp_errors = 'Y',
                             start_lower = c(Asym=0, Drop=0, lrc=-10,pwr=-0.1),
                             start_upper = c(Asym=0, Drop=0.5, lrc=-5, pwr=5), 
-                            lower= c(Asym=0.01, Drop=0, lrc=-200,pwr=-20), 
+                            lower= c(Asym=0.01, Drop=0, lrc=-200,pwr=0), 
                             upper = c(Asym=0.02, Drop=0.7, lrc=200, pwr=50)) 
   ,silent = TRUE)
   if(exists('fit')==FALSE){
@@ -75,7 +66,7 @@ fn_w <- function(din){
   try(if(exists('fit')==TRUE & is.null(fit)==FALSE){
     out <- fit %>% coef(.) %>% t() %>% as.data.table()
     out$isConv <- fit$convInfo$isConv},silent=TRUE)
-  
+  out$nobs_til_recovery <- nrow(din)
   return(out)
 }
 grpn <- uniqueN(mdat$id)
@@ -84,11 +75,13 @@ out <- mdat[,{setTxtProgressBar(pb, .GRP); fn_w(.SD)}, by=.(x,y,id)]
 close(pb)
 
 arrow::write_parquet(merge(out, sdat, by=c("x","y","id")), 
-                     sink=paste0("outputs/weibull_fits_1burn_2001-2014fires_",Sys.Date(),".parquet"))
+                     sink=paste0("outputs/weibull_fits_1burn_2001-2014fires_",Sys.time(),".parquet"))
 # END ****************************************************************
 
 
-fn_w(mdat[id==580288])
+# fn_w(mdat[id==580288])
+mdat$id %>% sample(1)
+fn_w(mdat[id==163858])
 
 # mdat[id==5676] %>% ggplot(data=.,aes(post_days,ndvi_anom))+geom_line()
 # 

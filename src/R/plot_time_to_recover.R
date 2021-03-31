@@ -1,5 +1,12 @@
-# Figures -------------------------------------------------------
+library(tidyverse)
+library(data.table)
+library(dtplyr)
+library(lubridate)
 
+# Figures -------------------------------------------------------
+oz_poly <- sf::read_sf("../data_general/Oz_misc_data/gadm36_AUS_shp/gadm36_AUS_1.shp") %>% 
+  sf::st_simplify(., dTolerance = 0.1) %>% 
+  select(NAME_1)
 sdat <- arrow::read_parquet(file = "outputs/time_to_recover_1burn_burned2003-2017_2021-01-14.parquet")
 
 sdat %>% 

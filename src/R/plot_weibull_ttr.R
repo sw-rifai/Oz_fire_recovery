@@ -1,22 +1,24 @@
 library(phenofit);
+library(data.table); 
+library(dtplyr, warn.conflicts = FALSE); 
 library(tidyverse);
 library(usethis);
 library(stars);
-library(data.table); 
-library(dtplyr); 
 library(lubridate) # load AFTER data.table
 library(RcppArmadillo)
 library(nls.multstart)
+library(arrow)
 source("src/R/functions_time_to_recover.R")
 
 # Isolate slow recovering pixels --------------------------------
 load("outputs/pixel_vegClass_groups.rds")
-sdat <- read_parquet("outputs/weibull_fits_pre2005_fires_2021-01-18.parquet")
+sdat <- arrow::read_parquet("outputs/weibull_fits_pre2005_fires_2021-01-18.parquet")
 tmp2 <- expand_grid(merge(sdat,nvis, by='id') %>% 
                       filter(vc!=25) %>%
                       filter(vc %in% c(2,3,4,5,11)) %>% 
                       filter(is.na(vc)==FALSE) %>% 
-                      sample_n(100), 
+                      sample_n(100) %>% 
+                      as.data.table(), 
                     pred_days=seq(1,2000,length.out=2000) %>% floor) %>% 
   mutate(pred = SSweibull(x=pred_days, Asym, Drop, lrc, pwr), 
          p_diff = Drop*pwr*pred_days^pwr*exp(lrc)*exp(-pred_days^pwr*exp(lrc))/pred_days) %>% 

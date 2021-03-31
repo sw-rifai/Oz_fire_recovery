@@ -19,11 +19,24 @@ dat <- rbindlist(list(tmp1,tmp2),use.names=TRUE)
 rm(tmp1,tmp2); gc(full=TRUE)
 
 dat <- dat[,.(x,y,date,id,ndvi,sndvi,ndvi_u,ndvi_sd, nbr,nbr_u,fire_doy)]
-gc()
-dat <- dat[order(x,y,date)][,`:=`(ndvi_anom=sndvi-ndvi_u)][,ndvi_anom_3mo := frollmean(ndvi_anom,
-                                    n = 3,fill = NA,align='right'), 
+norms <- dat %>% lazy_dt() %>% 
+  mutate(year=year(date)) %>% 
+  group_by(id,year) %>% 
+  summarize(ndvi_yr = mean(sndvi,na.rm=TRUE)) %>% 
+  ungroup() %>% 
+  group_by(id) %>% 
+  summarize(mandvi = median(ndvi_yr,na.rm=TRUE)) %>% 
+  ungroup() %>% 
+  as.data.table()
+
+gc(full=TRUE)
+dat <- merge(dat,norms,by='id')
+gc(full=TRUE)
+dat[,`:=`(ndvi_anom = sndvi-ndvi_u)]
+dat <- dat[order(x,y,date)][,`:=`(ndvi_anom_sd=(sndvi-ndvi_u)/ndvi_sd)][,ndvi_anom_sd_6mo := frollmean(ndvi_anom_sd,
+                                    n = 6,fill = NA,align='right'), 
                             by=.(x,y)]
-dat[,`:=`(ndvi_anom_sd_3mo = ndvi_anom_3mo/ndvi_sd)]
+# dat[,`:=`(ndvi_anom_sd_3mo = ndvi_anom_3mo/ndvi_sd)]
 gc(full=TRUE)
 
 
@@ -185,15 +198,15 @@ fn_min <- function(x){
   if(is.infinite(out)==TRUE){out <- NA_real_}
   return(out)}
 gc(full=TRUE)
-tmp_ttr1 <- dat1 %>% 
-  .[,.(ttr = fn_min(.SD[days_since_fire>0][ndvi_anom_sd_3mo>0]$days_since_fire) ),
+tmp_ttr1 <- dat1[,`:=`(month=month(date))] %>% 
+  .[,.(ttr3 = fn_min(.SD[days_since_fire>(180)][(ndvi_anom_sd_6mo)>(0)]$days_since_fire) ),
     keyby=.(x,y,id)]
 gc(full=TRUE)
 dat1 <- dat1[days_since_fire>= -366]
 gc(full=TRUE)
 dat1 <- merge(dat1,tmp_ttr1,by=c('x','y','id'))
 gc(full=TRUE)
-dat1 <- dat1[days_since_fire <= ttr]
+dat1 <- dat1[days_since_fire <= (ttr3+366)]
 gc(full=TRUE)
 cc <- arrow::read_parquet("outputs/mcd64_conComp_2001_2020.parquet")
 tmp1 <- unique(dat1[,.(x,y,id)]); gc(full=TRUE) # unique coords
@@ -204,7 +217,7 @@ gc(full=TRUE)
 dat1 <- merge(dat1,cc[,.(ba_m2,label,id)],by=c("id"),all.x = TRUE,allow.cartesian = TRUE);
 gc(full=TRUE)
 dat1 <- merge(dat1,clim %>% select(-x,-y),by=c("idx_awap",'date'))
-write_parquet(dat1, "/home/sami/scratch/fit_vi_ttr_fire_train_dat.parquet")
+write_parquet(dat1, "../data_general/proc_data_Oz_fire_recovery/fit_vi_ttrDef3_fire_train_dat.parquet")
 rm(dat1); gc(full=TRUE)
 
 
@@ -243,8 +256,8 @@ fn_min <- function(x){
   if(is.infinite(out)==TRUE){out <- NA_real_}
   return(out)}
 gc(full=TRUE)
-tmp_ttr1 <- dat2 %>% 
-  .[,.(ttr = fn_min(.SD[days_since_fire>0][ndvi_anom_sd_3mo>0]$days_since_fire) ),
+tmp_ttr1 <- dat2[,`:=`(month=month(date))]  %>% 
+  .[,.(ttr3 = fn_min(.SD[days_since_fire>(180)][(ndvi_anom_sd_6mo)>(0)]$days_since_fire) ),
     keyby=.(x,y,id)]
 gc(full=TRUE)
 dat2 <- dat2[days_since_fire>= -366]
@@ -262,7 +275,7 @@ gc(full=TRUE)
 dat2 <- merge(dat2,cc[,.(ba_m2,label,id)],by=c("id"),all.x = TRUE,allow.cartesian = TRUE);
 gc(full=TRUE)
 dat2 <- merge(dat2,clim %>% select(-x,-y),by=c("idx_awap",'date'))
-write_parquet(dat2, "/home/sami/scratch/fit_vi_ttr_fire_test_dat.parquet")
+write_parquet(dat2, "../data_general/proc_data_Oz_fire_recovery/fit_vi_ttrDef3_fire_test_dat.parquet")
 rm(dat2); gc(full=TRUE)
 
 

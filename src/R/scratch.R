@@ -2952,3 +2952,49 @@ dat %>%
   ggplot(data=.,aes(fire_year,..count.., color=factor(vc2_name)))+
   stat_count()
   
+
+
+
+
+
+dat1 <- read_parquet(file = "/home/sami/scratch/fit_vi_ttr_fire_train_dat.parquet")
+dat2 <- read_parquet(file = "../data_general/proc_data_Oz_fire_recovery/fit_vi_ttrDef2_fire_train_dat.parquet")
+dat3 <- read_parquet(file = "../data_general/proc_data_Oz_fire_recovery/fit_vi_ttrDef3_fire_train_dat.parquet")
+dat3$ttr3 %>% hist
+dat3$ttr3 %>% summary
+
+dat1$ttr %>% summary
+dat2$ttr2 %>% summary
+dat3$ttr3 %>% summary
+
+
+dat2[date==ymd('2020-12-01')]$ttr %>% is.na %>% table
+ymd("2020-12-01")-mean(dat2$date_fire1)
+
+dat2[date==(date_fire1)]
+
+junk <- dat2[,date==(date_fire1+months(12)),by='id']
+table(pred2$ttr<367)
+
+pred2$pred %>% hist
+dat2$ttr %>% is.na %>% table
+
+
+pred2[date==(date_fire1+months(12))]$ttr %>% 
+  is.na %>% table
+(pred2[date==(date_fire1+months(12))]$pred<367) %>% table
+
+dat2[date==ymd('2020-12-01')]$ttr %>% is.na %>% table
+
+
+junk <- pred2 %>% lazy_dt() %>% 
+  group_by(id) %>% 
+  filter(date==(date_fire1+months(12))) %>% 
+  as.data.table()
+
+junk$ttr %>% is.na %>% table
+junk$date %>% table
+junk$pred
+junk$ttr %>% summary
+junk[is.na(ttr)==F]$pred %>% summary
+

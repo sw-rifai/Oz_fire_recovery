@@ -87,7 +87,7 @@ dat1 <- anti_join(dat1,dat1_test,by='id')
 
 # Prep Black Summer data ---------------------------------------
 dat2[, `:=`(fire_month = month(date_fire1))]
-dat2 <- dat2[fire_month %in% c(9,10,11,12,1)][ttr>=90] %>% 
+dat2 <- dat2[fire_month %in% c(9,10,11,12,1)][ttr>=90 | is.na(ttr)] %>% 
   .[date>=ymd("2019-08-01")]
 
 sm1 <- dat2 %>% lazy_dt() %>% 
@@ -597,7 +597,9 @@ pred2 <- dat2 %>% lazy_dt() %>%
   filter(date==date_fire1+months(12)) %>% 
   mutate(pred = predict(nc_2,newdata=.,type='response')) %>% 
   ungroup() %>% 
-  as_tibble() 
+  as.data.table()
+
+
 pred2 %>% 
   ggplot(data=.,aes(x,y,fill=pred))+
   geom_tile()+
