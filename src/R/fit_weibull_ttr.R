@@ -3,14 +3,15 @@ library(tidyverse);
 library(usethis);
 library(stars);
 library(data.table); setDTthreads(threads=24)
-library(dtplyr); 
+library(dtplyr); # acting as a major pain in the ass now
 library(lubridate) # load AFTER data.table
 library(RcppArmadillo)
 library(arrow)
 library(nls.multstart)
 source("src/R/functions_time_to_recover.R")
 
-
+tb <- as_tibble
+dt <- as.data.table
 
 # Data import ---------------------------------------------------
 dat <- arrow::read_parquet("/home/sami/scratch/mcd43_se_coastal_nir_red_fire_cci.parquet", 
@@ -27,7 +28,7 @@ ssdat <- merge(ssdat,
                by=c("x","y","id"))
 
 mdat <- ssdat %>% 
-  lazy_dt() %>% 
+  lazy_dt() %>%
   group_by(x,y,id) %>% 
   filter(date > date_first_fire) %>% 
   filter(date <= recovery_date+days(365)) %>% 
@@ -44,16 +45,17 @@ mdat <- mdat %>% lazy_dt() %>%
 # lrc range: -100-0?
 # pwr range: 0-15?
 fn_w <- function(din){
+  set.seed(333)
   try(fit <- nls_multstart(ndvi_anom~SSweibull(post_days, Asym, Drop, lrc, pwr), 
                             data=din,
                             # iter=1,
-                            # iter=20,
-                            iter=c(1,2,2,2),
+                            iter=10,
+                            # iter=c(1,2,2,2),
                             # iter=c(1,2,3,3),
                             supp_errors = 'Y',
                             start_lower = c(Asym=0, Drop=0, lrc=-10,pwr=-0.1),
                             start_upper = c(Asym=0, Drop=0.5, lrc=-5, pwr=5), 
-                            lower= c(Asym=0.01, Drop=0, lrc=-200,pwr=0), 
+                            lower= c(Asym=0.01, Drop=0, lrc=-400,pwr=0), 
                             upper = c(Asym=0.02, Drop=0.7, lrc=200, pwr=50)) 
   ,silent = TRUE)
   if(exists('fit')==FALSE){
@@ -65,16 +67,33 @@ fn_w <- function(din){
   ,silent=TRUE)
   try(if(exists('fit')==TRUE & is.null(fit)==FALSE){
     out <- fit %>% coef(.) %>% t() %>% as.data.table()
-    out$isConv <- fit$convInfo$isConv},silent=TRUE)
+    out$isConv <- fit$convInfo$isConv
+    out$r2 <- yardstick::rsq_trad_vec(truth = din$ndvi_anom, 
+                            estimate = predict(fit))
+    
+    },silent=TRUE)
   out$nobs_til_recovery <- nrow(din)
   return(out)
 }
-grpn <- uniqueN(mdat$id)
-pb <- txtProgressBar(min = 0, max = grpn, style = 3)
-out <- mdat[,{setTxtProgressBar(pb, .GRP); fn_w(.SD)}, by=.(x,y,id)]
-close(pb)
 
-arrow::write_parquet(merge(out, sdat, by=c("x","y","id")), 
+# # data.table approach -----------------------------------
+# grpn <- uniqueN(mdat$id)
+# pb <- txtProgressBar(min = 0, max = grpn, style = 3)
+# out <- mdat[,{setTxtProgressBar(pb, .GRP); fn_w(.SD)}, by=.(x,y,id)]
+# close(pb)
+# arrow::write_parquet(merge(out, sdat, by=c("x","y","id")), 
+#                      sink=paste0("outputs/weibull_fits_1burn_2001-2014fires_",Sys.time(),".parquet"))
+
+# furrr approach -----------------------------------------------
+plan(multisession, workers=10)
+system.time(out <- mdat %>% 
+              split(.$id) %>%
+              future_map(~fn_w(.x)) %>% 
+              future_map_dfr(~ as_tibble(.), .id='id')
+)
+
+
+arrow::write_parquet(merge(out, sdat, by=c("id")), 
                      sink=paste0("outputs/weibull_fits_1burn_2001-2014fires_",Sys.time(),".parquet"))
 # END ****************************************************************
 

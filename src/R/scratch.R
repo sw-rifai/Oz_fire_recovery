@@ -2998,3 +2998,277 @@ junk$pred
 junk$ttr %>% summary
 junk[is.na(ttr)==F]$pred %>% summary
 
+
+library(stars)
+selev <- read_stars("../data_general/Oz_misc_data/DEM-H_500m_SE_coastal.tif") %>% 
+  set_names('elevation')
+
+dat1 %>% 
+  filter(between(x,146,148)) %>% 
+  filter(between(y,-38,-36)) %>% #pull(ttr) %>% quantile(.,c(0.01,0.99))
+  # pull(date_fire1) %>% unique
+  filter(between(date_fire1,ymd("2006-11-01"),ymd("2007-01-01"))) %>% 
+  ggplot(data=.,aes(x,y,color=ttr))+
+  geom_stars(data=selev,inherit.aes=F)+
+  geom_tile()+
+  geom_point(size=0.05)+
+  coord_sf(xlim=c(146.2,147.8),
+           ylim=c(-38,-36.6), 
+           expand = F)+
+  scale_fill_viridis_c(limits=c(150,2500),option='B')+
+  scale_color_viridis_c(limits=c(150,2500))
+
+dat1 %>% 
+  filter(between(x,146,148)) %>% 
+  filter(between(y,-38,-36)) %>% #pull(ttr) %>% quantile(.,c(0.01,0.99))
+  # pull(date_fire1) %>% unique
+  filter(between(date_fire1,ymd("2006-11-01"),ymd("2007-01-01"))) %>% 
+  ggplot(data=.,aes(elevation,ttr,color=slope))+
+  # ggpointdensity::geom_pointdensity()+
+  geom_point()+
+  geom_smooth(method='lm')+
+  facet_wrap(~cut_interval(min_nbr_anom,4))+
+  scale_color_viridis_c()
+
+
+tmp <- arrow::read_parquet("outputs/weibull_fits_1burn_2001-2014fires_2021-01-27.parquet")
+
+mdat[id==86967] %>% 
+  ggplot(data=.,aes(date,ndvi_anom))+
+  geom_point()
+
+
+expand_grid(
+ merge(out[pwr>3],
+       nvis, by='id')[vc!=25][vc%in%c(2,3,4,5,11)][is.na(vc)==FALSE][sample(.N,100)],
+ pred_days=floor(seq(1,2000,length.out=100))) %>% 
+  mutate(pred = SSweibull(x=pred_days, Asym, Drop, lrc, pwr), 
+         p_diff = Drop*pwr*pred_days^pwr*exp(lrc)*exp(-pred_days^pwr*exp(lrc))/pred_days) %>% 
+  ggplot(data=.,aes(pred_days, pred, color=lrc, group=id))+
+  geom_line()+
+  scale_color_viridis_c(option='B',end=0.9)+
+  facet_wrap(~cut_number(pwr,4), scales = 'fixed', labeller = label_both)  
+
+dt <- as.data.table
+tb <- as_tibble
+
+mdat[id%in%out[pwr>10]$id] %>% 
+  filter(date_first_fire==ymd('2001-12-01')) %>%
+  dt %>% 
+  ggplot(data=.,aes(date,ndvi_anom,group=id,color=x))+
+  geom_line(lwd=0.1)+
+  scale_color_viridis_c()
+
+mdat[id%in%out[pwr>10]$id] %>% 
+  filter(date_first_fire==ymd('2001-12-01')) %>%
+  tb %>% 
+  filter(id == 670508) %>% 
+  ggplot(data=.,aes(date,ndvi_anom,group=id,color=x))+
+  geom_line(lwd=1)+
+  scale_color_viridis_c()
+
+
+fit <- mdat[id == 670508][order(post_days)] %>% 
+  nls_multstart(ndvi_anom~SSweibull(post_days, Asym, Drop, lrc, pwr), 
+                data=.,
+                # iter=1,
+                # iter=20,
+                iter=c(1,2,2,2),
+                # iter=c(1,2,3,3),
+                supp_errors = 'Y',
+                start_lower = c(Asym=0, Drop=0, lrc=-10,pwr=-0.1),
+                start_upper = c(Asym=0, Drop=0.5, lrc=-5, pwr=5), 
+                lower= c(Asym=0.01, Drop=0, lrc=-200,pwr=0), 
+                upper = c(Asym=0.02, Drop=0.7, lrc=200, pwr=50))
+out[id==670508]
+
+
+# original fit
+expand_grid(
+    out[id==670508],
+    pred_days=floor(seq(1,2000,length.out=100))) %>% 
+  mutate(pred = SSweibull(x=pred_days, Asym, Drop, lrc, pwr), 
+         p_diff = Drop*pwr*pred_days^pwr*exp(lrc)*exp(-pred_days^pwr*exp(lrc))/pred_days) %>% 
+  ggplot(data=.,aes(pred_days, pred, color=lrc, group=id))+
+  geom_line()+
+  geom_point(data=mdat[id==670508], aes(post_days,ndvi_anom),inherit.aes = F)
+
+  
+mdat[id == 670508] %>% 
+  ggplot(data=.,aes(post_days,ndvi_anom))+
+  geom_point()+
+  geom_smooth(
+    method="nls", 
+    formula=y~Asym-Drop*exp(-exp(lrc)*x^pwr), # this is an nls argument
+    method.args = list(start=c(Asym=0.02,Drop=0.088,
+                               lrc=-200,pwr=27)), # this too
+    se=F, color='#CF0000')+
+  labs(x="Days post fire",y="NDVI", title='NLS Fit of Recovery')+
+  theme_linedraw()+
+  theme(panel.grid.minor = element_blank())
+
+dat[id == 670508] %>% 
+  ggplot(data=.,aes(post_days,ndvi_anom))+
+  geom_point()+
+  geom_smooth(
+    method="nls", 
+    formula=y~SSweibull(x,Asym,Drop,lrc,pwr), # this is an nls argument
+    method.args = list(start=c(Asym=0.02,Drop=0.088,
+                               lrc=-200,pwr=27)), # this too
+    se=F, color='#CF0000')+
+  labs(x="Days post fire",y="NDVI", title='NLS Fit of Recovery')+
+  theme_linedraw()+
+  theme(panel.grid.minor = element_blank())
+
+dat[id == 670508] %>% 
+  ggplot(data=.,aes(date,ndvi_anom))+
+  geom_point()+
+  geom_point(aes(date,sndvi),col='red')+
+  geom_point(aes(date,ndvi),col='blue')
+
+
+
+tmp_id <- mdat$id %>% unique %>% sample(500)
+junk <- mdat[id%in%tmp_id] %>% as_tibble
+library(furrr)
+plan(multisession, workers=20)
+system.time(test <- junk %>% 
+              split(.$id) %>%
+              future_map(~fn_w(.x)) %>% 
+              future_map_dfr(~ as_tibble(.), .id='id')
+)
+test <- as.data.table(test)
+
+
+expand_grid(
+  test %>% sample_n(10) %>% tb,
+  # test %>% filter(lrc <= -200) %>% tb,
+  pred_days=floor(seq(1,3000,length.out=100))) %>% 
+  mutate(pred = SSweibull(x=pred_days, Asym, Drop, lrc, pwr), 
+         p_diff = Drop*pwr*pred_days^pwr*exp(lrc)*exp(-pred_days^pwr*exp(lrc))/pred_days) %>% 
+  ggplot(data=.,aes(pred_days, pred, color=lrc, group=id))+
+  geom_line()+
+  # geom_point(data=mdat[id%in%test[r2 < 0.1]$id], 
+  #            aes(post_days,ndvi_anom),inherit.aes = F)+
+  facet_wrap(~id)+
+  scale_color_viridis_c(end=0.9)
+
+mdat[id%in%out[lrc==-200]$id]$ttr %>% max
+
+
+curve((x-100)*log(1 - x/100), -1000,100)
+curve(1*exp(-(x/1)**1), -10,100)
+
+
+expand_grid(ksat=1, 
+            P=-10:10,
+            alpha=c(-1,0,1),
+            beta=c(-1,0,1)) %>% 
+  mutate(k = ksat*exp(-((P/alpha)**beta))) %>% 
+  ggplot(data=.,aes(P,k,color=factor(paste(alpha,beta))))+
+  geom_line()
+
+
+
+
+merge(out, sdat, by=c("id"))
+
+out %>% sample_n(100) %>% plot
+out %>% 
+  ggplot(data=.,aes(lrc,pwr))+
+  geom_point()+
+  geom_smooth(method='lm')
+
+
+
+lm(pwr~lrc,data=out %>% filter(lrc>-275)) %>% summary
+
+
+nls_multstart(ndvi_anom~SSweibull(post_days, Asym, Drop, lrc, pwr), 
+              data=mdat[id==10003],
+              # iter=1,
+              iter=20,
+              # iter=c(1,2,2,2),
+              # iter=c(1,2,3,3),
+              supp_errors = 'Y',
+              start_lower = c(Asym=0, Drop=0, lrc=-10,pwr=-0.1),
+              start_upper = c(Asym=0, Drop=0.5, lrc=-5, pwr=5), 
+              lower= c(Asym=0.01, Drop=0, lrc=-400,pwr=0), 
+              upper = c(Asym=0.02, Drop=0.7, lrc=200, pwr=50)) 
+
+
+
+
+mdat[id==10003] %>% 
+  ggplot(data=.,aes(post_days, ndvi_anom))+
+  geom_point()+
+  geom_line(data=expand_grid(post_days=1:2000,data.frame(t(coef(fit)))) %>% 
+              mutate(pred = Asym-Drop*exp(-exp(lrc)*post_days^(0.15-0.15*lrc))),
+  aes(post_days,pred),col='red')
+
+
+
+out %>% sample_n(100) %>% 
+  ggplot(data=.,aes(pwr,lrc))+
+  geom_point()
+
+
+
+fn_w <- function(din){
+  set.seed(333)
+  try(fit <- nls_multstart(ndvi_anom~ Asym - Drop*exp(-exp(lrc)*post_days^(0.15-0.15*lrc)), 
+                           data=din,
+                           # iter=1,
+                           iter=10,
+                           supp_errors = 'Y',
+                           start_lower = c(Asym=0,Drop=0, lrc=-10),
+                           start_upper = c(Asym=0.1, Drop=0.5, lrc=-5), 
+                           lower= c(Asym=-0.2,Drop=-0.7, lrc=-1000), 
+                           upper = c(Asym=0.2, Drop=0.7, lrc=2000))
+      ,silent = TRUE)
+  if(exists('fit')==FALSE){
+    out <- data.table(Asym=NA_real_,Drop=NA_real_,lrc=NA_real_,pwr=NA_real_,isConv=FALSE)
+  }
+  try(if(exists('fit')==TRUE & is.null(fit)==TRUE){
+    out <- data.table(Asym=NA_real_,Drop=NA_real_,lrc=NA_real_,pwr=NA_real_,isConv=FALSE)
+  }
+  ,silent=TRUE)
+  try(if(exists('fit')==TRUE & is.null(fit)==FALSE){
+    out <- fit %>% coef(.) %>% t() %>% as.data.table()
+    out$isConv <- fit$convInfo$isConv
+    out$r2 <- yardstick::rsq_trad_vec(truth = din$ndvi_anom, 
+                                      estimate = predict(fit))
+    
+  },silent=TRUE)
+  out$nobs_til_recovery <- nrow(din)
+  return(out)
+}
+
+tmp_id <- mdat$id %>% unique %>% sample(100)
+junk <- mdat[id%in%tmp_id] %>% as_tibble
+plan(multisession, workers=20)
+system.time(test <- junk %>% 
+              split(.$id) %>%
+              future_map(~fn_w(.x)) %>% 
+              future_map_dfr(~ as_tibble(.), .id='id')
+)
+test <- as.data.table(test)
+
+test2 <-   test[sample(.N,10)]
+expand_grid(
+  test2 %>% tb,
+  # test %>% filter(between(r2,0.9,0.91)) %>% tb,
+  # test %>% filter(lrc <= -200) %>% tb,
+  post_days=floor(seq(1,3000,length.out=100))) %>% 
+  mutate(pred = -Drop*exp(-exp(lrc)*post_days^(0.15-0.15*lrc))) %>%  
+  ggplot(data=.,aes(post_days, pred, color=lrc, group=id))+
+  geom_point(data=mdat[id%in%test2$id],
+             aes(post_days,ndvi_anom),inherit.aes = F)+
+  geom_line()+
+  facet_wrap(~id)+
+  scale_color_viridis_c(end=0.9)
+
+test %>% ggplot(data=.,aes(lrc,Drop))+
+  geom_point()
+
+test %>% select(-isConv,-id) %>% cor
