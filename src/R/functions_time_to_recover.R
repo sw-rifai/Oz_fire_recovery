@@ -82,7 +82,7 @@ time_to_recover_vi_v6 <- function(din){
                       delta_vi_12mo = delta_vi_12mo,
                       delta_vi_36mo = delta_vi_36mo,
                       pre_fire_vi_12mo = pre_fire_vi_12mo, 
-                      pre_fire_vi_36mo = post_fire_vi_36mo, 
+                      pre_fire_vi_36mo = pre_fire_vi_36mo, 
                       post_fire_vi_12mo = post_fire_vi_12mo, 
                       post_fire_vi_36mo = post_fire_vi_36mo)
   }else{ 
@@ -214,7 +214,7 @@ time_to_recover_vi_v7 <- function(din){
     out$delta_vi_12mo = delta_vi_12mo
     out$delta_vi_36mo = delta_vi_36mo
     out$pre_fire_vi_12mo = pre_fire_vi_12mo
-    out$pre_fire_vi_36mo = post_fire_vi_36mo
+    out$pre_fire_vi_36mo = pre_fire_vi_36mo
     out$post_fire_vi_12mo = post_fire_vi_12mo
     out$post_fire_vi_36mo = post_fire_vi_36mo
       }
@@ -281,4 +281,96 @@ time_to_recover_vi_v7 <- function(din){
   }
   
     
+  return(out)}
+
+
+
+
+fn_ttr_def4 <- function(din){
+  din <- din[order(date)]
+  fire_bin <- any(din$fire_doy>0,na.rm=TRUE)
+  usable <- any(din[date>=ymd("2002-01-01")]$fire_doy>0,na.rm=TRUE) &
+    is.na(max(din[date<ymd("2002-01-01")]$fire_doy>0))
+  
+  if(usable==TRUE){
+    suppressWarnings({
+      vec_vi <- din$ndvi_anom
+      vec_vi_12mo <- frollmean(vec_vi, n=12, algo='exact',align='center')
+      vec_dates <- din$date
+      vec_fire_doy <- din$fire_doy>0
+      fire_count <- sum(vec_fire_doy, na.rm=TRUE)
+      first_fire_idx <- which(vec_fire_doy>0)
+      
+      # exclude fires in the first 12 months of the record
+      if(length(first_fire_idx)>1 & first_fire_idx<=12){
+        first_fire_idx <- first_fire_idx[2]
+      }else(first_fire_idx <- first_fire_idx[1])
+      date_first_fire <- vec_dates[first_fire_idx]
+      date_pre_fire_12mo <- vec_dates[first_fire_idx-12]
+      date_pre_fire_36mo <- vec_dates[first_fire_idx-36]
+      date_post_fire_12mo <- vec_dates[first_fire_idx+12]
+      date_post_fire_36mo <- vec_dates[first_fire_idx+36]
+      
+      full_vi_mean <- vec_vi[(-first_fire_idx:(-first_fire_idx-12))] %>% mean(., na.rm=TRUE)
+      if((first_fire_idx-12)>=1){
+        pre_fire_vi_12mo <- vec_vi[(first_fire_idx-12):(first_fire_idx-1)] %>% mean(., na.rm=TRUE)
+      }else{pre_fire_vi_12mo <- NA_real_}
+      if((first_fire_idx-36)>=1){
+        pre_fire_vi_36mo <- vec_vi[(first_fire_idx-36):(first_fire_idx-1)] %>% mean(., na.rm=TRUE)
+      }else{pre_fire_vi_36mo <- NA_real_}
+      if((first_fire_idx+12) <= length(vec_vi)){
+        post_fire_vi_12mo <- vec_vi[(first_fire_idx+1):(first_fire_idx+12)] %>% mean(., na.rm=TRUE)
+      }else{post_fire_vi_12mo <- NA_real_}
+      if((first_fire_idx+36) <= length(vec_vi)){
+        post_fire_vi_36mo <- vec_vi[(first_fire_idx+1):(first_fire_idx+36)] %>% mean(., na.rm=TRUE)
+      }else{post_fire_vi_36mo <- NA_real_}
+    })
+    
+    delta_vi_12mo <- as.double(post_fire_vi_12mo - pre_fire_vi_12mo)
+    delta_vi_36mo <- as.double(post_fire_vi_36mo - pre_fire_vi_36mo)
+    
+    recovery_date <- suppressWarnings(din[date > date_first_fire][ndvi_anom >= full_vi_mean]$date[1])
+    
+    if(is.na(recovery_date)==FALSE){
+      ttr <- as.double(recovery_date - date_first_fire)
+    }else{
+      ttr <- NA_real_}
+    if(is.infinite(ttr)==TRUE){ttr <- NA_real_}
+    
+    vec_y <- vec_vi[(first_fire_idx+1):(first_fire_idx+12)]
+    vec_x <- 0:11
+    vec_post_coef <- tryCatch(
+      coef(fastLm(X=cbind(1,vec_x), y=vec_y)),
+      error=function(cond){return(NA_real_)})
+    
+    
+    out <- data.table(fire_bin=fire_bin,
+                      fire_count = fire_count,
+                      date_first_fire = date_first_fire,
+                      full_vi_mean=full_vi_mean,
+                      ttr = ttr,
+                      ttr_alpha_12mo = vec_post_coef[1],
+                      ttr_beta_12mo = vec_post_coef[2],
+                      recovery_date = recovery_date,
+                      delta_vi_12mo = delta_vi_12mo,
+                      delta_vi_36mo = delta_vi_36mo,
+                      pre_fire_vi_12mo = pre_fire_vi_12mo, 
+                      pre_fire_vi_36mo = pre_fire_vi_36mo, 
+                      post_fire_vi_12mo = post_fire_vi_12mo, 
+                      post_fire_vi_36mo = post_fire_vi_36mo)
+  }else{ 
+    out <- data.table(fire_bin=fire_bin,
+                      fire_count = NA_integer_,
+                      date_first_fire = NA_Date_,
+                      full_vi_mean=NA_real_,
+                      ttr = NA_real_,
+                      ttr_alpha_12mo = NA_real_,
+                      ttr_beta_12mo = NA_real_,
+                      recovery_date = NA_Date_,
+                      delta_vi_12mo = NA_real_,
+                      delta_vi_36mo = NA_real_,
+                      pre_fire_vi_12mo = NA_real_, 
+                      pre_fire_vi_36mo = NA_real_, 
+                      post_fire_vi_12mo = NA_real_, 
+                      post_fire_vi_36mo = NA_real_)}
   return(out)}

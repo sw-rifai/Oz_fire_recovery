@@ -1,6 +1,6 @@
 # data.table::setDTthreads(12)
 library(data.table); 
-library(dtplyr); 
+# library(dtplyr); 
 library(tidyverse); 
 library(lubridate); 
 library(arrow);
@@ -34,7 +34,7 @@ gc(full=TRUE)
 gc(full=TRUE)
 
 id_train <- dat %>% 
-  lazy_dt() %>%
+  # lazy_dt() %>%
   filter(date < ymd("2019-08-01")) %>% 
   filter(is.na(fire_doy)==FALSE) %>% 
   filter(fire_doy>0) %>% 
@@ -46,7 +46,8 @@ gc(full=TRUE)
 
 dat1 <- dat[id%in%id_train$id]
 gc(full=TRUE)
-firedate_train <- dat1 %>% lazy_dt() %>%
+firedate_train <- dat1 %>% 
+  # lazy_dt() %>%
   filter(fire_doy > 0) %>%
   group_by(id) %>%
   mutate(date_fire1 = date) %>%
@@ -57,12 +58,13 @@ firedate_train <- dat1 %>% lazy_dt() %>%
 gc(full=TRUE)
 dat1 <- left_join(dat1,firedate_train,by='id')
 gc(full=TRUE)
-dat1 <- dat1 %>% lazy_dt() %>%
+dat1 <- dat1 %>% 
+  # lazy_dt() %>%
   mutate(days_since_fire = as.double(date - date_fire1)) %>%
   as.data.table()
 gc(full=TRUE)
 d_min_nbr <- dat1 %>% 
-  lazy_dt() %>% 
+  # lazy_dt() %>% 
   filter(days_since_fire <= 100) %>% 
   filter(is.na(nbr_anom)==FALSE) %>% 
   group_by(id) %>% 
@@ -101,13 +103,13 @@ gc(full=TRUE)
 
 # Plot TTR by month -------------------------------------------------------
 vec_ba <- dat1[days_since_fire==ttr] %>% 
-  lazy_dt() %>% 
+  # lazy_dt() %>% 
   mutate(fire_month = factor(month(date_fire1))) %>% 
   group_by(fire_month) %>% 
   summarize(ba=n()*2) %>% 
   as.data.table()
 dat1[days_since_fire==ttr] %>% 
-  lazy_dt() %>% 
+  # lazy_dt() %>% 
   mutate(fire_month = factor(month(date_fire1))) %>% 
   as.data.table() %>% 
   merge(., vec_ba, by='fire_month') %>% 
@@ -128,7 +130,7 @@ ggsave(filename = 'figures/boxplot_ObsTTR_by_month_1burn_preBS.png',
 
 # Plot TTR by year --------------------------------------------------------
 vec_ba <- dat1[days_since_fire==ttr] %>% 
-  lazy_dt() %>% 
+  # lazy_dt() %>% 
   mutate(fire_month = month(date_fire1)) %>% 
   filter(fire_month %in% c(10,11,12,1,2)) %>% 
   mutate(fire_year = year(date-months(3))) %>% 
@@ -136,7 +138,7 @@ vec_ba <- dat1[days_since_fire==ttr] %>%
   summarize(ba=n()*2) %>% 
   as.data.table()
 dat1[days_since_fire==ttr] %>% 
-  lazy_dt() %>% 
+  # lazy_dt() %>% 
   mutate(fire_month = month(date_fire1)) %>% 
   filter(fire_month %in% c(10,11,12,1,2)) %>% 
   mutate(fire_year = year(date-months(3))) %>% 
@@ -173,7 +175,8 @@ ggsave(filename = 'figures/boxplot_ObsTTR_by_fireYear_1burn_preBS.png',
 # TTR when ndvi_anom_3mo >= ndvi_anom_pre_fire
 dat2 <- dat[id%in%id_train$id]
 gc(full=TRUE)
-firedate_train <- dat2 %>% lazy_dt() %>%
+firedate_train <- dat2 %>% 
+  # lazy_dt() %>%
   filter(fire_doy > 0) %>%
   group_by(id) %>%
   mutate(date_fire1 = date) %>%
@@ -183,12 +186,13 @@ firedate_train <- dat2 %>% lazy_dt() %>%
 gc(full=TRUE)
 dat2 <- left_join(dat2,firedate_train,by='id')
 gc(full=TRUE)
-dat2 <- dat2 %>% lazy_dt() %>%
+dat2 <- dat2 %>% 
+  # lazy_dt() %>%
   mutate(days_since_fire = as.double(date - date_fire1)) %>%
   as.data.table()
 gc(full=TRUE)
 d_pre_ndvi <- dat2 %>% 
-  lazy_dt() %>% 
+  # lazy_dt() %>% 
   filter(days_since_fire < 0 & days_since_fire > -366) %>% 
   filter(is.na(ndvi_anom)==FALSE) %>% 
   group_by(id) %>% 
@@ -209,7 +213,7 @@ tmp_ttr2 <- dat2 %>%
 dat2 <- merge(dat2,tmp_ttr2[,.(id,ttr2)],by='id')
 
 dat2[days_since_fire==ttr2] %>% 
-  lazy_dt() %>% 
+  # lazy_dt() %>% 
   mutate(fire_month = month(date_fire1)) %>% 
   filter(fire_month %in% c(10,11,12,1,2)) %>% 
   mutate(fire_year = year(date-months(3))) %>% 
