@@ -20,13 +20,15 @@ dat <- rbindlist(list(tmp1,tmp2),use.names=TRUE)
 rm(tmp1,tmp2); gc(full=TRUE)
 
 dat <- dat[,.(x,y,date,id,ndvi,sndvi,ndvi_u,ndvi_sd, nbr,nbr_u,fire_doy)]
+gc(full=TRUE)
 norms <- dat %>% lazy_dt() %>% 
   mutate(year=year(date)) %>% 
   group_by(id,year) %>% 
   summarize(ndvi_yr = mean(sndvi,na.rm=TRUE)) %>% 
   ungroup() %>% 
   group_by(id) %>% 
-  summarize(mandvi = median(ndvi_yr,na.rm=TRUE)) %>% 
+  summarize(mandvi = mean(ndvi_yr,na.rm=TRUE), 
+            ndvi_yr_sd = sd(ndvi_yr,na.rm=TRUE)) %>% 
   ungroup() %>% 
   as.data.table()
 
@@ -54,10 +56,6 @@ gc(full=TRUE)
 dat <- dat[order(id,date)]
 gc(full=TRUE)
 
-dat <- dat[order(x,y,date)][,ndvi_sd_12mo := frollmean(ndvi_sd,
-                                                         n = 12,fill = NA,align='right'), 
-                            by=.(x,y)]
-gc(full=TRUE)
 
 id_train <- dat %>% 
   lazy_dt() %>%
@@ -113,6 +111,8 @@ gc(full=TRUE)
 dat1 <- merge(dat1,d_min_nbr,by='id')
 gc(full=TRUE)
 
+
+
 gc(full=TRUE,reset = TRUE)
 
 fn_min <- function(x){ 
@@ -122,10 +122,10 @@ fn_min <- function(x){
   })
   return(out)}
 
-fn_ttr4 <- function(din){
-  ttr <- din[days_since_fire>=365][ndvi_anom_12mo>=0]$days_since_fire
+fn_ttr5 <- function(din){
+  ttr <- din[days_since_fire>=365][ndvi_anom_12mo>= -0.25*ndvi_yr_sd]$days_since_fire
   ttr <- fn_min(ttr)
-  din$ttr4 <- ttr
+  din$ttr5 <- ttr
   din$pre_fire_vi_anom_3mo <- din[date == floor_date(date_fire1-1,'month')]$ndvi_anom_3mo[1]
   din$pre_fire_vi_anom_12mo <- din[date == floor_date(date_fire1-1,'month')]$ndvi_anom_12mo[1]
   din$pre_fire_vi_anom_24mo <- din[date == floor_date(date_fire1-1,'month')]$ndvi_anom_24mo[1]
@@ -137,7 +137,7 @@ grpn <- uniqueN(id_train$id)
 system.time(
  out <- dat1[,
                 {cat("progress",.GRP/grpn*100,"%\n"); 
-                  fn_ttr4(.SD)}, 
+                  fn_ttr5(.SD)}, 
                 by=.(id,x,y)]
 )
 arrow::write_parquet(out[date==date_fire1][,.(x,y,id,date_fire1,fire_doy,
@@ -146,8 +146,8 @@ arrow::write_parquet(out[date==date_fire1][,.(x,y,id,date_fire1,fire_doy,
                          ndvi_anom_3mo,
                          pre_fire_vi_anom_3mo,
                          pre_fire_vi_anom_12mo,pre_fire_vi_anom_24mo,pre_fire_vi_anom_36mo, 
-                         ttr4)], 
-      sink = paste0("../data_general/proc_data_Oz_fire_recovery/fit_vi_ttrDef4_preBS",Sys.time(),".parquet"))
+                         ttr5)], 
+      sink = paste0("../data_general/proc_data_Oz_fire_recovery/fit_vi_ttrDef5_preBS",Sys.time(),".parquet"))
 
 # cleanup 
 rm(out); gc(full=TRUE)

@@ -3272,3 +3272,436 @@ test %>% ggplot(data=.,aes(lrc,Drop))+
   geom_point()
 
 test %>% select(-isConv,-id) %>% cor
+
+
+tmp <- out[date==(date_fire1-month(1))] 
+ggplot(data=.,aes())
+
+ymd(out$date_fire1[1])-month(1)
+
+microbenchmark::microbenchmark(out$date_fire1[1]-month(1))
+microbenchmark::microbenchmark(out$date_fire1[1]-months(1))
+out$date_fire1[1]-months(1)
+microbenchmark::microbenchmark()
+
+microbenchmark::microbenchmark(floor_date(out$date_fire1[1]-as.difftime(1, unit='days'), unit = 'month'))
+
+
+floor_date(out$date_fire1[1]-as.difftime(1, unit='days'),unit = 'month')
+out$date_fire[1]-month(1)
+lubridate::month()
+
+floor_date(out$date_fire[1]-month(1),unit = 'month')
+
+
+microbenchmark::microbenchmark(fn_ttr4(dat1[id==1043976]),unit = 'us')
+
+fn_test <- function(din){
+  ttr <- din[days_since_fire>=365][ndvi_anom_12mo>=0]$days_since_fire
+  ttr <- fn_min(ttr)
+  din$ttr4 <- ttr
+  din$pre_fire_vi_anom_36mo <- din[date == floor_date(date_fire1-1,'month')]$ndvi_anom_36mo
+  return(din)
+}
+microbenchmark::microbenchmark(fn_test(dat1[id==1043976]),unit = 'us')
+
+as.difftime(1, unit="months")
+
+fn_ttr4(dat1[id==717])
+
+
+
+
+a <- arrow::read_parquet("../data_general/proc_data_Oz_fire_recovery/fit_vi_ttrDef4_preBS2021-04-07 10:59:18.parquet")
+b <- arrow::read_parquet("../data_general/proc_data_Oz_fire_recovery/fit_vi_fn-time_to_recover_vi_v6-ttrDef4_preBS2021-04-07 11:19:22.parquet")
+merge(a,b,by=c("id","x","y")) %>% 
+  ggplot(data=.,aes(ttr,ttr4))+
+  geom_point()+
+  geom_abline(col='red')+
+  geom_smooth(method='lm')
+
+merge(a,b,by=c("id","x","y")) %>% 
+  .[sample(.N, 10000)] %>% 
+  ggplot(data=.,aes(pre_fire_vi_36mo,pre_fire_vi_anom_36mo, 
+                    color=decimal_date(date_fire1)))+
+  geom_point()+
+  geom_abline(col='red')+
+  geom_smooth(method='lm')+
+  scale_color_viridis_c()
+
+
+merge(a,b,by=c("id","x","y")) %>% 
+  .[ttr>=365] %>% 
+  .[sample(.N, 10000)] %>% 
+  ggplot(data=.,aes(pre_fire_vi_36mo,ttr, 
+                    color=decimal_date(date_fire1)))+
+  geom_point()+
+  geom_smooth(method='lm')+
+  scale_color_viridis_c()
+
+merge(a,b,by=c("id","x","y")) %>% 
+  .[ttr>=365] %>% 
+  .[sample(.N, 10000)] %>% 
+  ggplot(data=.,aes(pre_fire_vi_anom_36mo,ttr, 
+                    color=decimal_date(date_fire1)))+
+  geom_point()+
+  geom_smooth(method='lm')+
+  scale_color_viridis_c()
+
+a[ttr4>365][sample(.N, 10000)] %>% 
+  ggplot(data=.,aes(pre_fire_vi_anom_36mo,ttr4, 
+                    color=decimal_date(date_fire1)))+
+  geom_point()+
+  geom_smooth()+
+  scale_color_viridis_c()
+
+b[ttr>365][sample(.N, 10000)] %>% 
+  ggplot(data=.,aes(pre_fire_vi_36mo,ttr, 
+                    color=decimal_date(date_first_fire)))+
+  geom_point()+
+  geom_smooth()+
+  scale_color_viridis_c()
+
+b[ttr>365][sample(.N, 10000)] %>% 
+  ggplot(data=.,aes(pre_fire_vi_36mo-pre_fire_vi_12mo,ttr, 
+                    color=decimal_date(date_first_fire)))+
+  geom_point()+
+  geom_smooth()+
+  scale_color_viridis_c()
+
+b[ttr>365][sample(.N, 10000)] %>% 
+  ggplot(data=.,aes(full_vi_mean,ttr, 
+                    color=decimal_date(date_first_fire)))+
+  geom_point()+
+  geom_smooth(method='glm', 
+              formula=y~x,
+              method.args=list(family=Gamma(link='log')))+
+  scale_color_viridis_c()
+
+a[ttr4>365][sample(.N, 10000)] %>% 
+  ggplot(data=.,aes(mandvi,ttr4, 
+                    color=decimal_date(date_fire1)))+
+  geom_point()+
+  geom_smooth(method='glm', 
+              formula=y~x,
+              method.args=list(family=Gamma(link='log')))+
+  scale_color_viridis_c()
+
+
+a %>% mutate(hydro_year=year(date_fire1-months(3))) %>% 
+  as_tibble() %>% 
+  ggplot(data=.,aes(hydro_year, y=ttr4,group=hydro_year))+
+  geom_boxplot(outlier.colour = NA)
+
+b %>% mutate(hydro_year=year(date_first_fire-months(3))) %>% 
+  as_tibble() %>% 
+  ggplot(data=.,aes(hydro_year, y=ttr,group=hydro_year))+
+  geom_boxplot(outlier.colour = NA)
+
+
+
+tmp_a <- a %>% mutate(hydro_year=year(date_fire1-months(3))) %>% 
+  as_tibble() %>% 
+  select(hydro_year, ttr4) %>% 
+  rename(ttr=ttr4) %>% 
+  mutate(method='data.table')
+
+tmp_b <- b %>% mutate(hydro_year=year(date_first_fire-months(3))) %>% 
+  as_tibble() %>% 
+  select(hydro_year, ttr) %>% 
+  mutate(method='vector')
+
+bind_rows(tmp_a,tmp_b) %>% 
+  filter(ttr>=366) %>% 
+  ggplot(data=.,aes(hydro_year, y=ttr,
+                    group=paste(hydro_year,method),
+                    color=method))+
+  geom_boxplot(outlier.colour = NA)
+
+
+fn_min(c(12,2,NA))
+min(c(12,2,NA),na.rm = TRUE)
+min(c(NA,NA),na.rm=TRUE) %>% is.infinite()
+
+
+a %>% mutate(hydro_year=year(date_fire1-months(3))) %>% 
+  as_tibble() %>% 
+  select(hydro_year, ttr4,id) %>% 
+  rename(ttr=ttr4) %>% 
+  filter(hydro_year==2019)
+
+fn_ttr4(dat1[id==76209])
+dat[id==76209]$fire_doy
+
+76209 %in% id_train$id
+id_train[id==76209]
+
+dat[id==76209][is.na(fire_doy)==F]
+
+junk <- dat %>% lazy_dt() %>% 
+  sample_n(500000) %>% 
+  mutate(fire_bin = ifelse(is.na(fire_doy)==F,1,0)) %>% 
+  as_tibble()
+
+library(mgcv)
+fit <- bam(fire_bin~s(ndvi_anom_36mo,k=5)+
+             s(ndvi_anom_3mo,k=5)+
+             s(mandvi,k=5), 
+    # family=binomial(), 
+    data=junk,
+    discrete=TRUE, select=TRUE)
+summary(fit)
+plot(fit,scale=0)
+
+a[sample(.N,10000)] %>% ggplot(data=.,aes(pre_fire_vi_anom_12mo,min_nbr_anom))+
+  geom_point()+
+  geom_smooth()
+
+
+b[sample(.N,10000)] %>% ggplot(data=.,aes(pre_fire_vi_36mo,delta_vi_12mo))+
+  geom_point()+
+  geom_smooth(method='lm')
+
+
+dat$date[1] %>% class
+lubridate::as_date(dat$date[1])
+
+
+left_join(dat1,firedate_train,by='id') %>% show_query()
+
+
+
+a[id==1043934]$pre_fire_vi_anom_36mo
+b[id==1043934]$pre_fire_vi_36mo
+
+fn_ttr4(dat1[id==1043934])$pre_fire_vi_anom_36mo
+time_to_recover_vi_v6(dat1[id==1043934])
+
+
+a[date_fire1<ymd("2002-01-01")]$pre_fire_vi_anom_36mo %>% is.na %>% table
+a[date_fire1<ymd("2002-01-01")][is.na(pre_fire_vi_anom_36mo)==F]
+dat[id==298759] %>% 
+  ggplot(data=.,aes(date, ndvi_anom))+
+  geom_point()+
+  geom_point(aes(date,ndvi_anom_36mo),col='red')
+
+
+
+out$ttr4 %>% hist
+out %>%
+  mutate(method='dt',
+         hydro_year = year(date_fire1-months(4))) %>% 
+  filter(ttr4>=366) %>% 
+  as_tibble() %>% 
+  ggplot(data=.,aes(hydro_year, y=ttr4,
+                    group=paste(hydro_year,method),
+                    color=method))+
+  geom_boxplot(outlier.colour = NA)
+
+dev.new()
+out[sample(.N,10000)] %>% 
+  ggplot(data=.,aes(pre_fire_vi_anom_36mo,
+                    ttr4))+
+  ggpointdensity::geom_pointdensity()+
+  # geom_point()+
+  geom_smooth(method='lm')+
+  scale_color_viridis_c()+
+  geom_vline(aes(xintercept=0))
+
+
+out[ttr4>400] %>% 
+ lm(ttr4~min_nbr_anom+ndvi_anom_3mo, data=.) %>% summary
+
+
+
+out <- arrow::read_parquet("../data_general/proc_data_Oz_fire_recovery/fit_vi_ttrDef4_preBS2021-04-07 14:05:44.parquet")
+
+
+out
+
+###############################################################################
+hot <- arrow::read_parquet("../data_general/proc_data_Oz_fire_recovery/fit_vi_ttrDef5_preBS2021-04-08 09:55:07.parquet") %>% 
+  as_tibble()
+wb <- arrow::read_parquet("outputs/weibull_fits_1burn_2001-2014fires_2021-04-05 18:32:01.parquet") %>% 
+  select(id,x,y,date_first_fire,
+         Asym,Drop,lrc,pwr,isConv,r2,nobs_til_recovery) %>% 
+  as.data.table()
+
+wb <- wb[isConv==TRUE][Drop>0][r2>0.25] %>% 
+  expand_grid(
+    .,
+    post_days=floor(seq(1,3000,length.out=300))) %>% 
+  mutate(pred = Asym-Drop*exp(-exp(lrc)*post_days^(0.15-0.15*lrc))) %>%  
+  mutate(p_diff = Drop*(0.15-0.15*lrc)*post_days^(0.15-0.15*lrc)*exp(lrc)*exp(-post_days^(0.15-0.15*lrc)*exp(lrc))/post_days) %>% 
+  arrange(Drop) %>% 
+  mutate(recovered = ifelse(pred >= 0,1,0)) %>% 
+  filter(recovered==1) %>% 
+  group_by(id) %>% 
+  filter(post_days == min(post_days,na.rm=TRUE)) %>% 
+  ungroup() %>% 
+  mutate(ttr_w = post_days)
+
+wb %>% rename(date=date_first_fire) %>%
+  mutate(id=as.integer(id)) %>% 
+  select(date,id,ttr_w) %>% pull(ttr_w) %>% summary
+
+summary(wb$ttr_w)
+summary(hot$ttr5)
+#  
+inner_join(
+  hot %>% rename(date=date_fire1) %>% 
+    select(x,y,date,id,ttr5), 
+  wb %>% rename(date=date_first_fire) %>%
+    mutate(id=as.integer(id)) %>% 
+    select(date,id,ttr_w)) %>% 
+  ggplot(data=.,aes(ttr5,ttr_w))+
+  ggpointdensity::geom_pointdensity()+
+  geom_abline(col='red')+
+  geom_smooth(method='lm')+
+  scale_color_viridis_c(option='B')
+
+
+inner_join(
+  hot %>% rename(date=date_fire1) %>% 
+    select(x,y,date,id,ttr5), 
+  wb %>% rename(date=date_first_fire) %>%
+    mutate(id=as.integer(id)) %>% 
+    select(date,id,ttr_w)) %>% 
+  filter(near(ttr5,2750,tol=100)) %>% 
+  filter(near(ttr_w,1000,tol=100))
+
+# 2707 vs 909
+dat[id%in%c(62059,68639,69666)] %>% 
+  ggplot(data=.,aes(date,ndvi_anom,group=id))+
+  geom_point()+
+  geom_line(aes(date,ndvi_anom_12mo,group=id),col='#CF0000')+
+  geom_hline(aes(yintercept=0))+
+  geom_line(aes(date,0-0.25*ndvi_yr_sd),col='black')+
+  geom_vline(aes(xintercept=ymd("2009-02-01")))+
+  geom_vline(aes(xintercept=ymd("2009-02-01")+days(2707)),col='blue')+
+  geom_vline(aes(xintercept=ymd("2009-02-01")+days(909)),col='green')
+
+dat[id%in%c(184319,189099,206436)] %>% 
+  ggplot(data=.,aes(date,ndvi_anom,group=id))+
+  geom_point()+
+  geom_line(aes(date,ndvi_anom_12mo,group=id),col='#CF0000')+
+  geom_hline(aes(yintercept=0))+
+  geom_line(aes(date,0-0.25*(ndvi_yr_sd)),col='black')+
+  geom_vline(aes(xintercept=ymd("2003-01-01")))+
+  geom_vline(aes(xintercept=ymd("2003-01-01")+days(2677)),col='blue')+
+  geom_vline(aes(xintercept=ymd("2003-01-01")+days(909)),col='green')
+
+
+
+
+
+
+
+
+
+
+duds <- wb[isConv==TRUE][Drop>0][r2>0.25] %>% 
+  expand_grid(
+    .,
+    post_days=floor(seq(1,3000,length.out=300))) %>% 
+  mutate(pred = Asym-Drop*exp(-exp(lrc)*post_days^(0.15-0.15*lrc))) %>%  
+  mutate(p_diff = Drop*(0.15-0.15*lrc)*post_days^(0.15-0.15*lrc)*exp(lrc)*exp(-post_days^(0.15-0.15*lrc)*exp(lrc))/post_days) %>% 
+  arrange(Drop) %>% 
+  mutate(id = as.integer(id))
+  # mutate(recovered = ifelse(pred >= 0,1,0)) %>% 
+  # filter(recovered==1) %>% 
+  # group_by(id) %>% 
+  # filter(post_days == min(post_days,na.rm=TRUE)) %>% 
+  # ungroup() %>% 
+  # mutate(ttr_w = post_days)
+
+
+duds %>% 
+  mutate(recovered = ifelse(pred >= 0,1,0)) %>%
+  group_by(id) %>% 
+  mutate(recovered = max(recovered,na.rm=TRUE)) %>% 
+  ungroup() %>% 
+  filter(recovered==0) %>% 
+  select(id,Asym,Drop,r2) %>% 
+  distinct()
+
+duds %>% 
+  filter(id==114332) %>% 
+  ggplot(data=.,aes(post_days,pred))+
+  geom_point()+
+  geom_hline(aes(yintercept=0))
+
+
+
+plan(multisession, workers=20)
+system.time(out <- mdat[id %in% sample(unique(mdat$id),10000)] %>% 
+              split(.$id) %>%
+              future_map(~fn_w2(.x)) %>% 
+              future_map_dfr(~ as_tibble(.), .id='id')
+)
+setDT(out)
+
+
+w2_r2 <- out$r2
+w_r2 <- out$r2
+w3_r2 <- out$r2
+
+
+summary(w2_r2)
+summary(w_r2)
+summary(w3_r2)
+
+
+
+test[isConv==TRUE][Drop>0][r2>0.25] %>% 
+  .[between(date_fire1,ymd("2004-08-01"),ymd("2005-03-01"))] %>% 
+  expand_grid(
+    .,
+    post_days=floor(seq(1,3000,length.out=300))) %>% 
+  mutate(pred = Asym-Drop*exp(-exp(lrc)*post_days^(pwr))) %>%  
+  # mutate(p_diff = Drop*(0.15-0.15*lrc)*post_days^(0.15-0.15*lrc)*exp(lrc)*exp(-post_days^(0.15-0.15*lrc)*exp(lrc))/post_days) %>% 
+  # arrange(Drop) %>% 
+  # mutate(recovered = ifelse(pred >= -0.05,1,0)) %>% 
+  # filter(recovered==1) %>% 
+  # group_by(id) %>% 
+  # filter(post_days == min(post_days)) %>% 
+  # ungroup() %>% 
+  # mutate(ttr_w = post_days) %>% 
+  ggplot(data=.,aes(post_days,pred,group=id))+
+  geom_line(lwd=0.1)+
+  geom_label(data=. %>% filter(post_days>=3000), 
+             aes(x=3000,y=pred,label=id))+
+  geom_hline(aes(yintercept=0),col='red')+
+  # geom_smooth(col='#CF0000')+
+  scico::scale_color_scico(begin=0.2,palette = 'lajolla')+
+  labs(x='Pre-fire 36 month NDVI anomaly', 
+       y='Weibull: Time to Recover (days)',
+       title=' Bushfires')+
+  theme_linedraw()
+
+
+mdat[id==65597] %>%
+  ggplot(data=.,aes(date,ndvi_anom))+
+  geom_line()
+
+  
+
+
+test %>% 
+  ggplot(data=., aes(pre_fire_vi_anom_36mo, ttr5))+
+  ggpointdensity::geom_pointdensity()+
+  scale_color_viridis_c()
+
+
+test[sample(.N,10000)] %>% 
+  ggplot(data=., aes( 
+                     x=-min_nbr_anom,
+                     y=ttr5,
+                     color=decimal_date(date_fire1)))+
+  geom_point()+
+  scale_color_viridis_c()+
+  geom_hline(aes(yintercept=0))+
+  geom_vline(aes(xintercept=0))+
+  geom_smooth(method='lm')+
+  theme_linedraw()
+

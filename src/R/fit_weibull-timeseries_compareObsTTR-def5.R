@@ -6,31 +6,29 @@ library(RcppArmadillo)
 library(nls.multstart)
 library(arrow)
 library(furrr)
+library(dtplyr)
 
 # Data import ---------------------------------------------------
 dat <- arrow::read_parquet("/home/sami/scratch/mcd43_se_coastal_nir_red_fire_cci.parquet", 
                            col_select = c("x","y","id","date","ndvi_anom"))
-sdat <- read_parquet("outputs/linear_ttr_multiBurns_2001-2020_2021-01-20.parquet")
+sdat <- read_parquet("../data_general/proc_data_Oz_fire_recovery/fit_vi_ttrDef5_preBS2021-04-08 09:55:07.parquet")
 
 #! Only fitting locations where the recovery was at least one year
-sdat <- sdat[fire_count==1][is.na(ttr)==FALSE][date_first_fire<ymd('2015-01-01')][ttr>=365]
+sdat <- sdat[is.na(ttr5)==FALSE][date_fire1<ymd('2015-01-01')][ttr5>=365]
 ssdat <- dat[id%in%sdat$id]
 ssdat <- merge(ssdat, 
-               sdat[,.(x,y,id,date_first_fire,recovery_date,ttr)], 
+               sdat[,.(x,y,id,date_fire1,ttr5)], 
                by=c("x","y","id"))
 
 mdat <- ssdat %>% 
-  # lazy_dt() %>%
+  lazy_dt() %>%
+  mutate(recovery_date = date_fire1+days(ttr5)) %>% 
   group_by(x,y,id) %>% 
-  filter(date > date_first_fire) %>% 
-  filter(date <= recovery_date+days(365)) %>% 
-  ungroup() %>% 
+  filter(date > date_fire1) %>% 
+  filter(date <= recovery_date + years(3)) %>% 
+  ungroup() %>%
+  mutate(post_days = as.double(date - date_fire1)) %>% 
   as.data.table() 
-
-mdat <- mdat %>% 
-  # lazy_dt() %>% 
-  mutate(post_days = as.double(date - date_first_fire)) %>% 
-  as.data.table()
 
 
 # Weibull form: Asym-Drop*exp(-exp(lrc)*x^pwr)
@@ -39,11 +37,11 @@ mdat <- mdat %>%
 # lrc range: -100-0?
 # pwr range: 0-15?
 fn_w <- function(din){
-  set.seed(333)
+  # set.seed(333)
   try(fit <- nls_multstart(ndvi_anom~ Asym - Drop*exp(-exp(lrc)*post_days^(0.15-0.15*lrc)), 
                            data=din,
                            # iter=1,
-                           iter=5,
+                           iter=10,
                            supp_errors = 'Y',
                            start_lower = c(Asym=0,Drop=0, lrc=-10),
                            start_upper = c(Asym=0.1, Drop=0.5, lrc=-5), 
@@ -73,7 +71,7 @@ fn_w2 <- function(din){
   try(fit <- nls_multstart(ndvi_anom~ -Drop*exp(-exp(lrc)*post_days^(0.15-0.15*lrc)), 
                            data=din,
                            # iter=1,
-                           iter=20,
+                           iter=10,
                            supp_errors = 'Y',
                            start_lower = c(Drop=0, lrc=-10),
                            start_upper = c(Drop=0.5, lrc=-5), 
@@ -100,6 +98,36 @@ fn_w2 <- function(din){
   return(out)
 }
 
+fn_w3 <- function(din){
+  # set.seed(333)
+  try(fit <- nls_multstart(ndvi_anom~ Asym - Drop*exp(-exp(lrc)*post_days^(pwr)), 
+                           data=din,
+                           # iter=1,
+                           iter=10,
+                           supp_errors = 'Y',
+                           start_lower = c(Asym=0,Drop=0, lrc=-10, pwr=-10),
+                           start_upper = c(Asym=0.1, Drop=0.5, lrc=-5, pwr=10), 
+                           lower= c(Asym=-0.2,Drop=-0.7, lrc=-1000, pwr=-100), 
+                           upper = c(Asym=0.2, Drop=0.7, lrc=2000, pwr=200))
+      ,silent = TRUE)
+  if(exists('fit')==FALSE){
+    out <- data.table(Asym=NA_real_,Drop=NA_real_,lrc=NA_real_,pwr=NA_real_,isConv=FALSE)
+  }
+  try(if(exists('fit')==TRUE & is.null(fit)==TRUE){
+    out <- data.table(Asym=NA_real_,Drop=NA_real_,lrc=NA_real_,pwr=NA_real_,isConv=FALSE)
+  }
+  ,silent=TRUE)
+  try(if(exists('fit')==TRUE & is.null(fit)==FALSE){
+    out <- fit %>% coef(.) %>% t() %>% as.data.table()
+    out$isConv <- fit$convInfo$isConv
+    out$r2 <- yardstick::rsq_trad_vec(truth = din$ndvi_anom, 
+                                      estimate = predict(fit))
+    
+  },silent=TRUE)
+  out$nobs_til_recovery <- nrow(din)
+  return(out)
+}
+
 # # data.table approach -----------------------------------
 # grpn <- uniqueN(mdat$id)
 # pb <- txtProgressBar(min = 0, max = grpn, style = 3)
@@ -111,15 +139,15 @@ fn_w2 <- function(din){
 # furrr approach -----------------------------------------------
 
 plan(multisession, workers=20)
-system.time(out <- mdat[id %in% sample(unique(mdat$id),50000)] %>% 
+system.time(out <- mdat %>% 
               split(.$id) %>%
-              future_map(~fn_w2(.x)) %>% 
+              future_map(~fn_w3(.x)) %>% 
               future_map_dfr(~ as_tibble(.), .id='id')
 )
 setDT(out)
-
+out[,`:=`(id=as.integer(id))]
 arrow::write_parquet(merge(out, sdat, by=c("id")), 
-                     sink=paste0("outputs/weibull_fits_1burn_2001-2014fires_",Sys.time(),".parquet"))
+                     sink=paste0("outputs/weibull4Param_fits_1burn_2001-2014fires_",Sys.time(),".parquet"))
 # END ****************************************************************
 
 # Load if not refitting
@@ -132,7 +160,7 @@ out$lrc %>% hist
 sdat <- sdat[,`:=`(id=as.integer(id))]
 out <- out[,`:=`(id=as.integer(id))]
 test <- merge(out, sdat, by=c("id")) %>% as.data.table
-test2 <-   test[Drop>0][r2>0.6][between(date_first_fire,ymd("2002-10-01"),ymd("2003-03-01"))]#[sample(.N,5000)]
+test2 <-   test[Drop>0][r2>0.6][between(date_fire1,ymd("2002-10-01"),ymd("2003-03-01"))]#[sample(.N,5000)]
 test3 <- expand_grid(
   test2,
   # test %>% filter(between(r2,0.9,0.91)) %>% tb,
@@ -144,30 +172,90 @@ test3 <- expand_grid(
   mutate(recovered = ifelse(pred >= -0.1,1,0))
 
 
-
-test[isConv==TRUE][Drop>0][r2>0.25][between(date_first_fire,ymd("2012-12-01"),ymd("2013-03-01"))] %>% 
+test[isConv==TRUE][Drop>0][r2>0.25] %>% #[between(date_fire1,ymd("2012-12-01"),ymd("2013-03-01"))] %>% 
+  .[sample(.N,10000)] %>% 
   expand_grid(
     .,
     post_days=floor(seq(1,3000,length.out=300))) %>% 
-  mutate(pred = -Drop*exp(-exp(lrc)*post_days^(0.15-0.15*lrc))) %>%  
-  mutate(p_diff = Drop*(0.15-0.15*lrc)*post_days^(0.15-0.15*lrc)*exp(lrc)*exp(-post_days^(0.15-0.15*lrc)*exp(lrc))/post_days) %>% 
+  mutate(pred = Asym-Drop*exp(-exp(lrc)*post_days^(pwr))) %>%  
+  # mutate(p_diff = Drop*(0.15-0.15*lrc)*post_days^(0.15-0.15*lrc)*exp(lrc)*exp(-post_days^(0.15-0.15*lrc)*exp(lrc))/post_days) %>% 
   arrange(Drop) %>% 
-  mutate(recovered = ifelse(pred >= -0.05,1,0)) %>% 
+  mutate(recovered = ifelse(pred >= 0,1,0)) %>% 
   filter(recovered==1) %>% 
   group_by(id) %>% 
-  filter(post_days == min(post_days)) %>% 
+  filter(post_days == min(post_days, na.rm=TRUE)) %>% 
   ungroup() %>% 
-  mutate(ttr_w = post_days) %>% 
-  ggplot(data=.,aes(pre_fire_vi_36mo, ttr_w))+
+  mutate(ttr_w = post_days) %>% #pull(ttr_w) %>% summary
+  filter(ttr_w >= 365) %>% 
+  ggplot(data=.,aes(ttr5, ttr_w))+
   ggpointdensity::geom_pointdensity(alpha=0.5)+
   geom_hline(aes(yintercept=0),col='black')+
-  geom_smooth(col='#CF0000')+
+  geom_abline()+
+  geom_smooth(col='#CF0000',method='lm')+
   scico::scale_color_scico(begin=0.2,palette = 'lajolla')+
-  labs(x='Pre-fire 36 month NDVI anomaly', 
+  labs(x='TTR Def 5', 
        y='Weibull: Time to Recover (days)',
-       title='2012/13 Bushfires')+
+       title=' Bushfires')+
   theme_linedraw()
 
+test[isConv==TRUE][Drop>0][r2>0.25] %>% #[between(date_fire1,ymd("2012-12-01"),ymd("2013-03-01"))] %>% 
+  .[sample(.N,1000)] %>% 
+  expand_grid(
+    .,
+    post_days=floor(seq(1,3000,length.out=300))) %>% 
+  mutate(pred = Asym-Drop*exp(-exp(lrc)*post_days^(pwr))) %>%  
+  # mutate(p_diff = Drop*(0.15-0.15*lrc)*post_days^(0.15-0.15*lrc)*exp(lrc)*exp(-post_days^(0.15-0.15*lrc)*exp(lrc))/post_days) %>% 
+  # arrange(Drop) %>% 
+  # mutate(recovered = ifelse(pred >= 0,1,0)) %>% 
+  # filter(recovered==1) %>% 
+  # group_by(id) %>% 
+  # filter(post_days == min(post_days, na.rm=TRUE)) %>% 
+  # ungroup() %>% 
+  # mutate(ttr_w = post_days) %>% #pull(ttr_w) %>% summary
+  # filter(ttr_w >= 365) %>% 
+  ggplot(data=.,aes(post_days,pred,group=id,color=ttr5))+
+  geom_line(lwd=0.1)+
+  # ggpointdensity::geom_pointdensity(alpha=0.5)+
+  geom_hline(aes(yintercept=0),col='#CF0000')+
+  # geom_abline()+
+  # geom_smooth(col='#CF0000',method='lm')+
+  scico::scale_color_scico(begin=0.2,palette = 'lajolla')+
+  labs(x='post_days', 
+       y='NDVI anom',
+       title=' Bushfires')+
+  theme_linedraw()+
+  facet_wrap(~cut_number(lrc,4))
+
+
+vec_post_days <- sort(unique(mdat$post_days))
+test[isConv==TRUE][Drop>0][r2<0.25] %>% #[between(date_fire1,ymd("2012-12-01"),ymd("2013-03-01"))] %>% 
+  .[sample(.N,10)] %>% 
+  expand_grid(.,
+    post_days=vec_post_days) %>% 
+  mutate(pred = Asym-Drop*exp(-exp(lrc)*post_days^(pwr))) %>% 
+  left_join(., mdat, by=c('id','post_days')) %>% 
+  as_tibble() %>% 
+  ggplot(data=.,aes(post_days,pred,group=id,color=id))+
+  geom_point(aes(post_days,ndvi_anom,color=id,group=id),inherit.aes = F)+
+  geom_line(lwd=1)+
+  geom_hline(aes(yintercept=0),col='#CF0000')+
+  # geom_abline()+
+  # geom_smooth(col='#CF0000',method='lm')+
+  scico::scale_color_scico(end=0.9,palette = 'batlow')+
+  scale_x_continuous(limits=c(0,2500))+
+  labs(x='post_days', 
+       y='NDVI anom',
+       title=' Bushfires')+
+  theme_linedraw()+
+  facet_wrap(~cut_interval(r2,4))
+
+
+sum(test$lrc < -10,na.rm=TRUE)/dim(test)[1] # fraction with long recovery
+sum(test$r2 >0.2,na.rm=TRUE)/dim(test)[1] # fraction with reasonable fit
+
+
+out[,.(Asym,Drop,lrc,pwr,r2,nobs_til_recovery)][sample(.N,1000)] %>% 
+  GGally::ggpairs()
 
 
 test3 %>% 

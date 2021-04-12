@@ -27,6 +27,7 @@ tmp4 <- stars::read_stars("../data_general/MCD43/MCD43A4_nir_red_median_500m_SE_
 gc(full=TRUE)
 grid <- st_mosaic(tmp1,tmp2,tmp3,tmp4)
 rm(tmp1,tmp2,tmp3,tmp4); gc(full=TRUE)
+stars::write_stars(grid, "../data_general/proc_data_Oz_fire_recovery/grid_500m_SE_coastal.tif")
 
 
 # STAGE 2: Import Fire ---------------------------------------------------

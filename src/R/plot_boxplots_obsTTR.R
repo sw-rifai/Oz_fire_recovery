@@ -504,3 +504,7 @@ bind_rows(dat1,dat1_test) %>%
             aes(hydro_year,obs_time), 
             lty=3)+
   scale_color_viridis_d(option='A',begin = 0,end=0.7)
+
+
+
+

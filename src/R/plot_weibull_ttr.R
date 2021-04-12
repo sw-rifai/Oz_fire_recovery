@@ -12,7 +12,9 @@ source("src/R/functions_time_to_recover.R")
 
 # Isolate slow recovering pixels --------------------------------
 load("outputs/pixel_vegClass_groups.rds")
-sdat <- arrow::read_parquet("outputs/weibull_fits_pre2005_fires_2021-01-18.parquet")
+# sdat <- arrow::read_parquet("outputs/weibull_fits_pre2005_fires_2021-01-18.parquet")
+sdat <- arrow::read_parquet("outputs/weibull_fits_1burn_2001-2014fires_2021-03-31 12:48:06.parquet", 
+                            as_data_frame = T)
 tmp2 <- expand_grid(merge(sdat,nvis, by='id') %>% 
                       filter(vc!=25) %>%
                       filter(vc %in% c(2,3,4,5,11)) %>% 
@@ -25,7 +27,8 @@ tmp2 <- expand_grid(merge(sdat,nvis, by='id') %>%
   as.data.table()
 
 vec_slowgrow <- tmp2[near(pred_days,100)][p_diff<0.0001]$id
-vec_slowgrow <- tmp2 %>% lazy_dt() %>% 
+vec_slowgrow <- tmp2 %>% 
+  # lazy_dt() %>% 
   filter(pred_days <= 100) %>% 
   group_by(id) %>%
   summarize(low_grow_days = sum(p_diff <= 0.00005)) %>% 
@@ -40,6 +43,7 @@ tmp2 %>%
   merge(., vec_inflection, by='id') %>% 
   mutate(slowgrow = if_else(id%in%vec_slowgrow[low_grow_days>=100]$id,
                             'delayed','instant')) %>% 
+  as_tibble() %>% 
   ggplot(data=.,aes(pred_days, pred, group=factor(id)))+
   geom_vline(aes(xintercept=inflection,group=factor(id),color=inflection,alpha=inflection),lwd=0.25,lty=1)+
   geom_hline(aes(yintercept=-0.5*Drop,group=factor(id),color=inflection,alpha=inflection),lwd=0.25,lty=1)+
@@ -58,12 +62,15 @@ tmp2 %>%
   )
 ggsave(filename = 'figures/ObsTTR_delayed_inflection_WeibullTTR_2003-04_fires.png', 
        width=20, height=12, units='cm')
-
-
 # TO DO: Use inflection (~ -0.5*Drop), number of days with ~0 growth, and TTR to 
 #        construct classes of vegetation recovery
 # Maybe with a PCA, or a k-means
 # END ****************************************************************
+
+
+
+
+
 
 
 # Largscale 1burn recovery shapes ------------------------------------
