@@ -72,10 +72,171 @@ vcf <- merge(vcf, dttr, all.x = TRUE, all.y = FALSE,
       by.y = c("x", "y","id"), 
       allow.cartesian = TRUE)
 vcf <- vcf[is.na(hydro_year_fire1)==FALSE]
-vcf[vc%in%1:14]
 
 
-vec_ids <- vcf[vc%in%c(1,2,3,4,5)][between(min_nbr_anom,-1,-0.5)][hydro_year_fire1==2002][sample(.N,10000)]$id
+d1 <- vcf[vc%in%2:7][near(year,hydro_year_fire1, tol=1.1)][,
+       .(tree_min_fire = min(tree_cover),
+         tree_med_fire = median(tree_cover),
+         tree_max_fire = max(tree_cover),
+         grass_max_fire = max(grass_cover),
+         grass_med_fire = median(grass_cover),
+         grass_min_fire = min(grass_cover),
+         tree_loss = max(tree_cover)-min(tree_cover), 
+         grass_gain = max(grass_cover)-min(grass_cover)),
+       by=.(x,y,id,hydro_year_fire1)]
+
+d2 <- vcf[vc%in%2:7][near(year,hydro_year_fire1+(ttr5/365),tol=1.1)] %>% 
+  .[,.(tree_max_ttr = max(tree_cover),
+       tree_med_ttr = median(tree_cover),
+       grass_max_ttr = max(grass_cover),
+       tree_min_ttr = min(tree_cover), 
+       grass_min_ttr = min(grass_cover),
+       grass_med_ttr = median(grass_cover), 
+       grass_max_ttr = max(grass_cover),
+       min_nbr_anom = unique(min_nbr_anom)), 
+    by=.(x,y,id,ttr5,vc,vc_name)]
+d3 <- vcf[vc%in%2:7][hydro_year_fire1 %in% 2001:2015] %>% 
+  .[,.(hydro_year = median(hydro_year_fire1)),by=.(id)] %>% 
+  .[,.(nobs = .N), by=.(hydro_year)]
+# END PROCESSING ***************************************************************
+
+# START Plotting ---------------------------------------------------------------
+
+# Plot Distr. % change VCF ------------------------------------------------
+merge(d1,d2,by=c('x','y','id')) %>% 
+  .[between(hydro_year_fire1,2001,2015)] %>% 
+  .[vc %in% c(2,3,5)] %>% 
+  # .[sample(.N,100)] %>% 
+  as_tibble() %>% 
+  group_by(id) %>% 
+  summarize(`Tree Cover` = tree_max_ttr-tree_max_fire,
+            `Non-tree Veg. Cover` = grass_min_ttr-grass_min_fire,
+            hydro_year = unique(hydro_year_fire1)) %>% 
+  ungroup() %>% 
+  pivot_longer(cols=c(`Tree Cover`, `Non-tree Veg. Cover`), 
+               names_to="veg",
+               values_to="cover") %>% 
+  inner_join(., as_tibble(d3), by='hydro_year') %>% 
+  ggplot(data=.,aes(x=cover,
+                    y=factor(hydro_year),
+                    fill=nobs*0.25 #stat(x)
+  ))+
+  geom_vline(aes(xintercept=0),col='grey60',lwd=1)+
+  ggridges::geom_density_ridges_gradient(
+    rel_min_height=0.01,
+    scale=1,
+    quantile_lines = TRUE, 
+    quantiles=c(0.5),
+    # quantiles = c(0.05,0.25,0.5,0.75,0.95), 
+    alpha = 0.7)+
+  labs(x='(% at Recovery)-(% at pre-Fire)', 
+       y='Hydraulic Year', 
+       fill=expression(paste(km**2)))+
+  scale_x_continuous(expand=c(0,0))+
+  scico::scale_fill_scico(end=0.9)+
+  coord_cartesian(xlim=c(-25,25))+
+  facet_wrap(~veg,ncol=2)+
+  theme_linedraw()+
+  theme(text = element_text(family = 'Dancing Script'),
+        panel.grid.minor = element_blank(), 
+        panel.grid.major = element_line(linetype = 3, color = 'black', size = 0.1),
+        # panel.border = element_blank(), 
+        strip.background = element_blank(), 
+        strip.text = element_text(color='black', 
+                                  face='bold'))
+ggsave(filename="figures/figure_change-vcf-pre-post-fire.png", 
+       width=20,
+       height=15, 
+       units='cm', 
+       dpi=350)
+# End figure *******************************************************************
+
+# Does NBR predict amount of grass? --------------------------------------------
+d_sd <- vcf[, .(tree_cover_sd = sd(tree_cover, na.rm = TRUE)), keyby = .(id)]
+
+
+d4 <- merge(d1,vcf,by=c("x","y","id","hydro_year_fire1")) %>% 
+  merge(., d_sd,by='id') %>% 
+  lazy_dt() %>% 
+  filter(hydro_year_fire1 <= 2015) %>% 
+  group_by(id) %>% 
+  filter(year >= (hydro_year_fire1+1)) %>% 
+  filter(  (tree_cover >= (tree_max_fire))) %>% 
+  filter(year == min(year)) %>% 
+  ungroup() %>%
+  mutate(ttr_tree_cover = year - hydro_year_fire1) %>% 
+  as.data.table()
+
+d4 %>% lm(ttr_tree_cover ~ I(ttr5/365), data=.) %>% 
+  summary
+
+# sen <- function(..., weights=NULL){
+#   mblm::mblm(...)
+# }
+d4 %>% 
+  ggplot(data=.,aes(ttr5/365, ttr_tree_cover))+
+  geom_density_2d_filled(bins=10)+
+  # geom_point()+
+  geom_smooth(method=MASS::rlm, color='#AAAA00')+
+  geom_abline(col='red',lty=3)+
+  scale_fill_viridis_d(option='G')+
+  scale_x_continuous(expand=c(0,0))+
+  scale_y_continuous(expand=c(0,0))+
+  coord_cartesian(xlim=c(1,10),
+                  ylim=c(1,10))+
+  labs(x='NDVI Time to Recover (years)', 
+       y='Tree Cover Time to Recover (years)', 
+       fill='Density')+
+  theme_linedraw()+
+  theme(panel.grid = element_blank())
+ggsave(filename="figures/figure_compare_ttr-tree-cover_ttrDef5-ndvi.png", 
+       width=20,
+       height=14, 
+       units='cm', 
+       dpi=350)
+# End figure *******************************************************************
+
+
+vec_ids <- vcf[vc%in%c(3)][hydro_year_fire1<=2005][x<149][sample(.N,100)]$id
+vcf %>% lazy_dt() %>% 
+  filter(id %in% vec_ids) %>% 
+  filter(year>=(hydro_year_fire1+1)) %>% 
+  mutate(delta_t = year-hydro_year_fire1) %>% 
+  as_tibble() %>% 
+  filter(delta_t < (round(ttr5/365)+3)) %>% 
+  left_join(., d4[,.(id, ttr_tree_cover)], by=c("id")) %>% 
+  as_tibble() %>% 
+  filter(delta_t <= ttr_tree_cover) %>% 
+  ggplot(data=.,aes(delta_t, tree_cover, group=id, color=min_nbr_anom))+
+  geom_line(lwd=0.25)+
+  geom_point(data=. %>% filter(delta_t == round(ttr5/365)), 
+                               aes(ttr5/365, y=tree_cover))+
+  # geom_smooth(inherit.aes = F, aes(delta_t,tree_cover), 
+  #             method='gam', 
+  #             formula=y~s(x,bs='cs',k=5))+
+  scale_color_viridis_c(option='F',direction = -1)+
+  scale_x_continuous(limits=c(1,12),expand=c(0,0))+
+  labs(x='Years since fire', 
+       y='Tree Cover (%)', 
+       color='NBR Anom. at fire')+
+  facet_wrap(~cut_interval(min_nbr_anom, n=3),
+             ncol = 1,
+             labeller = label_both)+
+  theme_linedraw()
+ggsave(filename="figures/figure_compare_time-series_ttr-tree-cover_ttrDef5-ndvi.png", 
+       width=20,
+       height=14, 
+       units='cm', 
+       dpi=350)
+
+
+vcf[id%in%vec_ids][sample(.N,1000)] %>% 
+  ggplot(data=.,aes(x,y,color=min_nbr_anom))+
+  geom_point()+
+  scale_color_viridis_c(option='B',direction=-1)
+
+
+
          
 dttr[id%in%vec_ids][,.(val=decimal_date(date_fire1+days(ttr5))),by=.(id,vc_name)] %>% 
   .[.(mval = mean(val)),by=.(vc_name)]
@@ -122,72 +283,7 @@ vcf[year<2019][id %in% vec_ids] %>%
 vcf[vc%in%2:7][near(year,hydro_year_fire1, tol=1.1)][id==1115] # window of fire
 vcf[vc%in%2:7][near(year,hydro_year_fire1+(ttr5/365), tol=1.1)][id==1115] # window of recovery
 
-d1 <- vcf[vc%in%2:7][near(year,hydro_year_fire1, tol=1.1)][,
-              .(tree_min_fire = min(tree_cover),
-                tree_max_fire = max(tree_cover),
-                grass_max_fire = max(grass_cover),
-                grass_min_fire = min(grass_cover),
-                tree_loss = max(tree_cover)-min(tree_cover), 
-                grass_gain = max(grass_cover)-min(grass_cover)),
-              by=.(x,y,id,hydro_year_fire1)]
 
-d2 <- vcf[vc%in%2:7][near(year,hydro_year_fire1+(ttr5/365),tol=1.1)] %>% 
-                           .[,.(tree_max_ttr = max(tree_cover), 
-                           grass_max_ttr = max(grass_cover),
-                           tree_min_ttr = min(tree_cover), 
-                           grass_min_ttr = min(grass_cover),
-                           min_nbr_anom = unique(min_nbr_anom)), 
-                        by=.(x,y,id,ttr5,vc,vc_name)]
-d3 <- vcf[vc%in%2:7][hydro_year_fire1 %in% 2001:2015] %>% 
-         .[,.(hydro_year = median(hydro_year_fire1)),by=.(id)] %>% 
-         .[,.(nobs = .N), by=.(hydro_year)]
-
-merge(d1,d2,by=c('x','y','id')) %>% 
-  .[between(hydro_year_fire1,2001,2015)] %>% 
-  .[vc %in% c(2,3,5)] %>% 
-  # .[sample(.N,100)] %>% 
-  as_tibble() %>% 
-  group_by(id) %>% 
-  summarize(`Tree Cover` = tree_max_ttr-tree_max_fire,
-            `Non-tree Veg. Cover` = grass_min_ttr-grass_min_fire,
-            hydro_year = unique(hydro_year_fire1)) %>% 
-  ungroup() %>% 
-  pivot_longer(cols=c(`Tree Cover`, `Non-tree Veg. Cover`), 
-               names_to="veg",
-               values_to="cover") %>% 
-  inner_join(., as_tibble(d3), by='hydro_year') %>% 
-  ggplot(data=.,aes(x=cover,
-                    y=factor(hydro_year),
-                    fill=nobs*0.25 #stat(x)
-                    ))+
-  geom_vline(aes(xintercept=0),col='grey60',lwd=1)+
-  ggridges::geom_density_ridges_gradient(
-    rel_min_height=0.01,
-    scale=1,
-    quantile_lines = TRUE, 
-    quantiles=c(0.5),
-    # quantiles = c(0.05,0.25,0.5,0.75,0.95), 
-    alpha = 0.7)+
-  labs(x='(% at Recovery)-(% at pre-Fire)', 
-       y='Hydraulic Year', 
-       fill=expression(paste(km**2)))+
-  scale_x_continuous(expand=c(0,0))+
-  scico::scale_fill_scico(end=0.9)+
-  coord_cartesian(xlim=c(-25,25))+
-  facet_wrap(~veg,ncol=2)+
-  theme_linedraw()+
-  theme(text = element_text(family = 'Palatino'),
-        panel.grid.minor = element_blank(), 
-        panel.grid.major = element_line(linetype = 3, color = 'black', size = 0.1),
-        # panel.border = element_blank(), 
-        strip.background = element_blank(), 
-        strip.text = element_text(color='black', 
-                                  face='bold'))
-ggsave(filename="figures/figure_change-vcf-pre-post-fire.png", 
-       width=20,
-       height=15, 
-       units='cm', 
-       dpi=350)
 
 
 merge(d1,d2,by=c('x','y','id')) %>% 
@@ -196,9 +292,9 @@ merge(d1,d2,by=c('x','y','id')) %>%
   .[sample(.N,100)] %>% 
   ggplot(data=.)+
   geom_segment(aes(x=hydro_year_fire1,
-                   y=tree_min_at_fire, 
+                   y=tree_min_fire, 
                    xend=hydro_year_fire1+(ttr5/365), 
-                   yend=tree_at_ttr, 
+                   yend=tree_max_ttr, 
                    color=min_nbr_anom), 
                lwd=0.2)+
   labs(y='Tree Cover (%)')+
@@ -230,6 +326,7 @@ merge(d1,d2,by=c('x','y','id')) %>%
   summary
 
 # approximately: tree_loss ~ 0.71 + -47*min_nbr_anom
+
 
 
 # SCRAP -------------------------------------------------------------------

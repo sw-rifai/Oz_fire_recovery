@@ -3705,3 +3705,104 @@ test[sample(.N,10000)] %>%
   geom_smooth(method='lm')+
   theme_linedraw()
 
+
+
+microbenchmark::microbenchmark(sdat$date_fire1[1] - months(3),unit = 'us')
+microbenchmark::microbenchmark(sdat$date_fire1[1] - lubridate::month(3),unit = 'us')
+lubridate::date(sdat$date_fire[1]) - lubridate::month(3)
+
+sdat$date_fire1[1] - data.table::month(3,tz='UTC')
+
+data.table::year(sdat$date_fire1[1])
+
+
+junk <- as.IDate(sdat$date_fire1[1])
+junk+data.table::month(3)
+as.ITime(1,'month')
+junk+1
+as.POSIXct(junk)+ as.ITime(1,'month')
+
+as.ITime(1,format='month')
+
+junk+months(1)
+
+sdat$date_fire1[1]+months(1)
+
+sdat$date_fire1[1] - lubridate::month(3)
+
+ymd("2005-03-01") - lubridate::month(3)
+ymd("2005-03-01") + month(1)
+
+ymd("2005-01-31")+month(3)
+
+ymd("2005-01-15")+months(3)
+
+
+ymd("2005-03-01")+month(1)
+ymd("2005-03-01")+year(1)
+
+as.Date("2005-03-01")-base::months(3)
+as.Date("2005-03-01") - lubridate:::months.numeric(3)
+
+junk <- as.Date("2005-03-01")
+microbenchmark::microbenchmark(as.Date("2005-03-01")-lubridate:::months.numeric(3),unit = 'us')
+microbenchmark::microbenchmark(as.Date("2005-03-01")-base::months(3),unit = 'us')
+microbenchmark::microbenchmark(as.Date("2005-03-01")-months(3),unit = 'us')
+
+year(junk)
+month(junk)
+
+
+difftime()
+
+month(junk)
+
+library(mondate)
+junk <- as.Date("2005-03-01")
+junk - as.difftime(tim = 1, format='m')
+mondate::as.Date.mondate(junk)
+mondate::month()
+
+x <- mondate.ymd(2012, 2, 01)
+microbenchmark::microbenchmark(x - as.difftime(3,units =  "months"), unit='us')
+
+
+nfires[date==ymd("2003-01-01")]
+sdat[date_fire1==ymd("2003-01-01")] %>% nrow()
+
+dat[date==ymd("2003-01-01")][is.na(fire_doy)==F]
+
+dat[id==1951] %>% ggplot(data=.,aes(date,ndvi_anom))+geom_line()+
+  geom_vline(aes(xintercept=ymd("2018-03-01")))
+
+fn_ttr5(dat1[id==1963])
+dat[id==635]
+
+fn_ttr5(dat1[id==902052])
+unique(dat1$id) %>% length
+
+
+dat1[min_nbr_anom >= 0]
+
+
+dat1[date_fire1>=ymd("2018-01-01") & min_nbr_anom < -0.75 & date>=ymd("2018-01-01")]$id %>% unique
+
+sdat[date_fire1>=ymd('2018-01-01')]$ttr5 %>% is.na %>% table
+
+
+
+dat1 %>% 
+  sample_n(1000) %>% 
+  as_tibble() %>% 
+  ggplot(data=.,aes(elevation,der))+
+  geom_point()+
+  geom_smooth(method='lm')
+
+dat1 %>% select(ttr5,
+                elevation,aspect, der,
+                pH,ece,pto,nto,
+                silt,sand,clay) %>% 
+  as_tibble() %>% 
+  na.omit() %>% 
+  cor %>% 
+  corrplot::corrplot(method='number')
