@@ -3806,3 +3806,588 @@ dat1 %>% select(ttr5,
   na.omit() %>% 
   cor %>% 
   corrplot::corrplot(method='number')
+
+
+
+dat[is.na(fire_doy)==F]
+
+dat[id==70] %>% ggplot(data=.,aes(date,delta_t_anom_12mo))+
+  geom_line()
+
+dat[id==70] %>% ggplot(data=.,aes(date,lsta-tmax))+
+  geom_line()
+
+
+dat <- dat %>% lazy_dt() %>% 
+  select(-lsta_anom, -lst_u) %>% 
+  as.data.table()
+
+dat <- dat %>% lazy_dt() %>% 
+  select(-malsta, -lsta_yr_sd) %>% 
+  as.data.table()
+
+
+
+out$min_delta_t_anom %>% hist
+
+dat1$max_delta_t_anom %>% hist
+
+out$ttr5_delta_t %>% summary
+
+
+vec1 <- dat1$id %>% sample(6)
+
+dat1[id%in%vec1][days_since_fire>=0] %>% 
+  ggplot(data=.,aes(days_since_fire, delta_t_anom_12mo,group=id,color=id))+
+  geom_line()+
+  geom_hline(aes(yintercept=0),col='red')+
+  facet_wrap(~id,ncol = 2)
+
+35 - 20
+
+dat1[id%in%vec1][days_since_fire<0] %>% 
+  .[,`:=`(lsta_anom = lsta-lsta_u.x)] %>% 
+  pivot_longer(cols=c("lsta_anom","tmax_anom","delta_t_anom")) %>% 
+  ggplot(data=.,aes(days_since_fire, value,color=name))+
+  geom_line()+
+  # geom_hline(aes(yintercept=0),col='red')+
+  facet_wrap(~id,ncol = 2)
+
+
+dat1[days_since_fire<0] %>% 
+  .[,`:=`(lsta_anom = lsta-lsta_u.x)] %>% 
+  .[sample(.N,10000)] %>% 
+  ggplot(data=.,aes(tmax_anom, lsta_anom))+
+  geom_point()+
+  geom_smooth(method='lm')+
+  facet_wrap(~month)
+
+dat1[days_since_fire<0] %>% 
+  .[,`:=`(lsta_anom = lsta-lsta_u.x)] %>% 
+  .[sample(.N,10000)] %>% 
+  ggplot(data=.,aes(tmax, lsta))+
+  geom_point()+
+  geom_smooth(method='lm')+
+  facet_wrap(~month)
+
+
+vec1 <- dat1$id %>% sample(100)
+out[id%in%vec1] %>% #[sample(.N,1000)] %>% 
+  ggplot(data=., aes(madelta_t, ttr5_delta_t))+
+  geom_point()
+
+dat1[days_since_fire<0] %>% 
+  .[,`:=`(lsta_anom = lsta-lsta_u.x)] %>% 
+  .[id%in%vec1] %>% 
+  # .[sample(.N,10000)] %>% 
+  ggplot(data=.,aes(tmax_anom, lsta_anom))+
+  geom_point()+
+  geom_smooth(method='lm')+
+  geom_abline(col='red')+
+  facet_wrap(~month)
+
+vec1 <- dat1$id %>% sample(100)
+dat[id%in%vec1][,`:=`(lsta_anom = lsta-lsta_u.x)] %>% 
+  .[month%in%c(11,12,1)] %>% 
+  # .[id%in%vec1] %>% 
+  # .[sample(.N,10000)] %>%
+  ggplot(data=.,aes(tmax_anom, lsta_anom))+
+  geom_point()+
+  geom_smooth(method='lm')+
+  geom_abline(col='red')+
+  coord_equal()+
+  facet_grid(month~year)
+
+
+
+
+
+dat1[year >= (fire_year1-1) & year<=(fire_year1+1)
+             ][,.(min_tree_cover_anom = min(tree_cover_anom,na.rm=TRUE), 
+                  fire_year1 = unique(fire_year1)), 
+               by=.(id)] %>% 
+  ggplot(data=.,aes(fire_year1,min_tree_cover_anom))+
+  geom_smooth()
+
+
+out[sample(.N,10000)] %>% 
+  ggplot(data=.,aes(pre_fire_kn_anom_36mo,ttr5_kn))+
+  geom_point(alpha=0.05)+
+  geom_smooth(method='lm')
+
+fn_w4(mdat[id==4182])
+fn_w3(mdat[id==4182][post_days <= (ttr5_kn+1000)])
+
+mdat[id==4182][post_days>=365] %>% 
+  ggplot(data=.,aes(post_days,kn_anom))+geom_line()+
+  geom_vline(aes(xintercept=ttr5_kn))
+vec_ids <- unique(mdat$id)
+vec_ids[200]
+
+mdat[post_days<=365]$kn_anom %>% summary
+
+mdat[id==4182] %>% 
+  lazy_dt() %>% 
+  group_by(id) %>% 
+  filter(kn_anom == min(kn_anom) & between(post_days,0,90)) %>% 
+  show_query()
+
+mdat[id==4182][post_days <= 366][kn_anom == min(kn_anom)]$post_days
+mdat[id==vec_ids[10000]][post_days <= 366][kn_anom == min(kn_anom)]$post_days
+mdat[id==4182]$post_days %>% sort
+
+mdat$post_days %>% hist(1000)
+
+vec_ids <- mdat$id %>% unique
+
+
+mdat[kn_anom > 0.5]$id
+fn_w4(mdat[id==vec_ids[555]])
+mdat[id==vec_ids[555]] %>% 
+  ggplot(data=.,aes(post_days,kn_anom))+geom_line()+
+  geom_vline(aes(xintercept=ttr5_kn))
+fn_w4(mdat[id==450120])
+
+
+
+plan(multisession, workers=10)
+system.time(out <- mdat[id %in% sample(vec_ids,1000)] %>% 
+              split(.$id) %>%
+              future_map(~fn_w4(.x)) %>% 
+              future_map_dfr(~ as_tibble(.), .id='id')
+)
+plan(sequential)
+setDT(out)
+out[,`:=`(id=as.integer(id))]
+
+out$isConv %>% table
+out$r2 %>% hist
+out$rmse %>% hist
+
+out[isConv==TRUE][Drop>0][r2>0.25] %>% #[between(date_fire1,ymd("2012-12-01"),ymd("2013-03-01"))] %>% 
+  .[sample(.N,10)] %>% 
+  expand_grid(
+    .,
+    post_days=floor(seq(1,3000,length.out=300))) %>% 
+  mutate(pred = Asym-Drop*exp(-exp(lrc)*post_days^(pwr))) %>%  
+  # mutate(p_diff = Drop*(0.15-0.15*lrc)*post_days^(0.15-0.15*lrc)*exp(lrc)*exp(-post_days^(0.15-0.15*lrc)*exp(lrc))/post_days) %>% 
+  arrange(Drop) %>% 
+  mutate(recovered = ifelse(pred >= 0,1,0)) %>% 
+  filter(recovered==1) %>% 
+  group_by(id) %>% 
+  filter(post_days == min(post_days, na.rm=TRUE)) %>% 
+  ungroup() %>% 
+  mutate(ttr_w = post_days) %>% #pull(ttr_w) %>% summary
+  filter(ttr_w >= 365) %>% 
+  ggplot(data=.,aes(ttr5_kn, ttr_w))+
+  ggpointdensity::geom_pointdensity(alpha=0.5)+
+  geom_hline(aes(yintercept=0),col='black')+
+  geom_abline()+
+  geom_smooth(col='#CF0000',method='lm')+
+  scico::scale_color_scico(begin=0.2,palette = 'lajolla')+
+  labs(x='TTR Def 5', 
+       y='Weibull: Time to Recover (days)',
+       title=' Bushfires')+
+  theme_linedraw()
+
+vec_sel <- sample(unique(out[Drop>0][r2>0.7]$id),25)
+dat_sel <- dat[id%in%vec_sel]
+dat_sel <- merge(dat_sel,sdat[,.(id,date_fire1)],by='id')
+dat_sel <- dat_sel[,`:=`(post_days = as.double(date-date_fire1))][post_days>=0]
+out[isConv==TRUE][Drop>0][r2>0.7] %>% #[between(date_fire1,ymd("2012-12-01"),ymd("2013-03-01"))] %>% 
+  .[id %in% vec_sel] %>% 
+  expand_grid(
+    .,
+    post_days=floor(seq(1,3000,length.out=300))) %>% 
+  left_join(., sdat, by='id') %>% 
+  mutate(pred = Asym-Drop*exp(-exp(lrc)*post_days^(pwr))) %>% 
+  filter(post_days <= ttr5_kn+365) %>% 
+  ggplot(data=.,aes(post_days,pred,group=id,color=Drop))+
+  geom_point(data=mdat[id%in%vec_sel],
+             inherit.aes = F,
+             aes(post_days, kn_anom,group=id),
+             alpha=0.1,size=0.5)+
+  geom_line()+
+  scale_color_viridis_c()+
+  geom_hline(aes(yintercept=0),col='red')+
+  geom_vline(aes(xintercept=ttr5_kn),col='grey')+
+  facet_wrap(~id)
+
+
+
+
+# n - r / n+r
+(0.5-0.2)/(0.5+0.2)
+tanh(((0.5-0.2)/(0.5+0.2))**2)
+tanh(((0.5-0.2)/(0.5+0.2)))**2
+
+xn <- 0.5
+xr <- 0.2
+sigma <- 0.5
+knr <- exp(-(xn-xr)^2/(2*sigma^2))
+kndvi <- (1-knr) / (1+knr)
+
+kndvi
+rm(xn,xr,sigma,knr,kndvi)
+
+
+dat[sample(.N, 1000)] %>% 
+  ggplot(data=.,aes(kn_simple,kndvi,color=sigma))+
+  geom_point()+
+  geom_smooth(method='lm')+
+  scale_color_viridis_c()
+
+
+dat %>% lazy_dt() %>% 
+  group_by(id,date) %>% 
+  mutate(ndvi = (nir-red)/(red+nir)) %>% 
+  ungroup() %>% 
+  show_query()
+
+
+dat[1:5,.(kn,kn_u,kn_anom)]
+
+
+
+dat[id==70] %>% ggplot(data=.,aes(date,lai))+geom_line()
+smooth_vi(dat[id==70]) %>% 
+  ggplot(data=.,aes(date,svi))+geom_line()+
+  geom_line(aes(date,lai),col='blue')
+
+dat[id==7000] %>% ggplot(data=.,aes(date,svi))+geom_line()+
+  geom_line(aes(date,lai),col='blue')
+
+
+dat[id==70] %>% ggplot(data=.,aes(date,delta_t_anom_12mo))+geom_line()
+dat1[id==70]$date_fire1
+
+fn_ttr5(dat1[id==7000])
+
+
+
+out %>% sample_n(10000) %>% as.data.table() %>% 
+  ggplot(data=.,aes(max_delta_t_anom,ttr5_delta_t))+
+  ggpointdensity::geom_pointdensity()+
+  scale_color_viridis_c()+
+  geom_smooth(method='lm')
+
+
+
+
+mdat[id==1533] %>% ggplot(data=.,aes(post_days,slai_anom+10))+geom_line()
+mdat[id==1533] %>% ggplot(data=.,aes(post_days,slai_12mo))+geom_line()
+mdat[id==1533]$ttr5_lai
+
+
+
+
+nls_multstart(slai ~ K/(1 + ((K-L0)/L0)*exp(-r*post_days)), 
+ data=mdat[id==70],
+      # iter=1,
+      iter=10,
+      supp_errors = 'Y',
+      start_lower = c(K=0, L0=0, r=0),
+      start_upper = c(K=5, L0=5, r=2), 
+      lower= c(K=0.1, L0=0.01, r=0.1), 
+      upper = c(K=10, L0=10, r=10))
+
+fn_logistic_growth(mdat[id==1533])
+fn_logistic_growth(mdat[id==1533]) %>% 
+  expand_grid(post_days=seq(0,2000)) %>% 
+  mutate(pred = K/(1 + ((K-L0)/L0)*exp(-r*post_days))) %>% 
+  ggplot(data=.,aes(post_days,pred))+geom_line()
+
+mdat[id==1533]$malai
+
+curve(5/(1 + ((5-1)/1)*exp(-0.0001*x)),0,500)
+
+out$isConv %>% table
+out[r2>0.75][sample(.N,100)] %>% 
+  expand_grid(., post_days=seq(0,2000,length.out = 100)) %>% 
+  mutate(pred = K/(1 + ((K-L0)/L0)*exp(-r*post_days))) %>% 
+  ggplot(data=.,aes(post_days,pred,group=id,color=r))+
+  geom_line()+
+  scale_color_viridis_c(end=0.9)+
+facet_wrap(~cut_interval(K,4))
+
+
+out[isConv==T][r2>0.5] %>% 
+  ggplot(data=.,aes(K,L0))+
+  geom_point()
+
+mdat$slai %>% hist
+
+out[isConv==F][is.na(r2)==F]
+fn_logistic_growth(mdat[id==12536]) %>% 
+  expand_grid(post_days=seq(0,2000)) %>% 
+  mutate(pred = K/(1 + ((K-L0)/L0)*exp(-r*post_days))) %>% 
+  ggplot(data=.,aes(post_days,pred))+geom_line()
+mdat[id==12536] %>% 
+  ggplot(data=.,aes(post_days,slai))+geom_point()
+
+
+out %>% 
+  mutate(drop = K-L0) %>% 
+  as_tibble() %>% 
+  ggplot(data=.,aes(L0,r))+
+  geom_point()+
+  geom_smooth()
+
+# 19
+system.time(
+  out <- mdat[id%in%vec_ids][,fn_logistic_growth(.SD), by=.(x,y,id)])
+
+system.time(fn_logistic_growth(mdat[id==12536]))
+0.091*1000/10
+
+
+vec_ids <- sample(unique(mdat[ttr5_lai > 365]$id),10)
+system.time(out <- mdat[id %in% vec_ids] %>% 
+              split(.$id) %>%
+              future_map(~fn_logistic_growth(.x),.progress = TRUE) %>% 
+              future_map_dfr(~ as_tibble(.), .id='id')
+)
+
+vec_ids %>% 
+  future_map(~fn_logistic_growth(mdat[id==.x])) %>% 
+  future_map_dfr(~as_tibble(.), .id='id')  
+
+vec_ids %>% 
+  map(~.x)
+
+# options(future.globals.maxSize
+getOption(future.globals.maxSize)
+        
+options(future.globals.maxSize = 3000 * 1024^2)
+plan(multisession, workers=10)
+system.time(out <- vec_ids %>% 
+              future_map(~fn_logistic_growth(mdat[id==.x])) %>% 
+              future_map_dfr(~as_tibble(.), .id='id')  
+)
+future::FutureGlobals()
+
+
+
+out %>% select(-isConv,-id,-nobs_til_recovery) %>% 
+  as_tibble() %>%
+  drop_na() %>% 
+  cor() %>% 
+  corrplot::corrplot(method='number')
+
+out$r %>% quantile(., 0.95,na.rm=T)
+merge(out,sdat,by='id') %>% 
+  ggplot(data=.,aes(x,y,fill=K))+
+  geom_tile()+
+  coord_sf(xlim = c(147,149),
+           ylim=c(-38,-36))+
+  scale_fill_viridis_c(limits=c(0,8))+
+  # scale_fill_viridis_c(limits=c(0,0.05))+
+  theme(panel.grid = element_blank())
+
+
+
+lai[date==ymd("2003-01-01")] %>% 
+  ggplot(data=.,aes(x,y,fill=lai))+
+  geom_tile()+
+  coord_sf(xlim = c(147,149),
+           ylim=c(-38,-36))+
+  scale_fill_viridis_c(limits=c(0,10))+
+  theme(panel.grid = element_blank())
+
+
+fn_logistic_growth(mdat[id==12536])
+
+out %>% 
+ggplot(data=.,aes(x,y,fill=L0))+
+  geom_tile()+
+  coord_sf(xlim = c(147,149),
+           ylim=c(-38,-36))+
+  scale_fill_viridis_c(limits=c(0,0.05))+
+  theme(panel.grid = element_blank())
+
+
+
+merge(out,sdat,by='id') %>% 
+  as_tibble() %>% 
+  # sample_n(10000) %>% 
+  mutate(fire_year=year(date_fire1-months(3))) %>% 
+  ggplot(data=.,aes(fire_year, K, group=fire_year))+
+  geom_boxplot(outlier.colour = NA)+
+  scale_color_viridis_c()+
+  geom_hline(aes(yintercept=median(K)),col='red')
+
+merge(out,sdat,by='id') %>% 
+  as_tibble() %>% 
+  mutate(fire_year=year(date_fire1-months(3))) %>% 
+  ggplot(data=.,aes(fire_year, L0, group=fire_year))+
+  geom_boxplot(outlier.colour = NA)+
+  scale_color_viridis_c()+
+  geom_hline(aes(yintercept=median(L0)),col='red')
+
+merge(out,sdat,by='id') %>% 
+  as_tibble() %>% 
+  mutate(fire_year=year(date_fire1-months(3))) %>% 
+  ggplot(data=.,aes(fire_year, r, group=fire_year))+
+  geom_boxplot(outlier.colour = NA)+
+  scale_color_viridis_c()+
+  geom_hline(aes(yintercept=median(r)),col='red')+
+  coord_cartesian(ylim=c(0,0.1))
+
+merge(out,sdat,by='id') %>% 
+  as_tibble() %>% 
+  sample_n(1e5) %>% 
+  filter(K-L0 > 0) %>% 
+  # mutate(fire_year=year(date_fire1-months(3))) %>% 
+  ggplot(data=.,aes(K-L0,r))+
+  # ggpointdensity::geom_pointdensity()+
+  geom_point(size=0.5)+
+  geom_smooth()+
+  scale_color_viridis_c(option='F')
+  
+
+
+
+
+# Load clim
+clim <- arrow::read_parquet("/home/sami/scratch/awap_clim_se_coastal.parquet", 
+                            # col_select = c("x","y","date","month","year","tmax","tmax_anom")
+                            )
+
+# Attach AWAP pixel id to VI ------------------------------------
+coords_vi <- lazy_dt(sdat) %>% select(x,y,id) %>% distinct() %>% as.data.table()
+coords_vi <- st_as_sf(coords_vi, coords = c("x","y"))
+st_crs(coords_vi) <- st_crs(4326)
+coords_awap <- unique(clim[,.(x,y)])
+coords_awap_sf <- st_as_sf(coords_awap, coords = c('x','y'))
+st_crs(coords_awap_sf) <- st_crs(4326)
+nn_coords <- RANN::nn2(
+  coords_awap_sf %>% st_coordinates(),
+  coords_vi %>% st_coordinates(), 
+  k=1
+)
+coords_awap <- coords_awap %>% mutate(idx_awap = row_number()) %>% as.data.table()
+gc(full=TRUE)
+coords_vi <- coords_vi %>% st_drop_geometry() %>% as.data.table()
+coords_vi$idx_awap <- coords_awap[nn_coords$nn.idx,]$idx_awap
+gc(full=TRUE)
+
+
+# merges
+gc(full=TRUE)
+clim <- merge(clim,coords_awap,by=c('x','y'))
+gc(full=TRUE)
+sdat <- merge(sdat, coords_vi, by='id')
+gc(full=TRUE)
+
+# subset clim to only coords with relevant fires
+clim <- clim[idx_awap %in% unique(sdat$idx_awap)]
+
+
+sdat <- merge(sdat, clim, by=c("idx_awap","date"))
+# END Attach climate ***********************************************************
+tmp <- merge(sdat,out,by='id')
+tmp[sample(.N,1e5)] %>% 
+  ggplot(data=., aes(K-malai, post_precip_12mo.x-map.x))+
+  geom_point()+
+  geom_smooth(method='lm')
+
+
+
+
+sdat$malai %>% hist
+vec_ids <- unique(out[K==max(K)]$id) %>% sample(., 10)
+vec_ids <- sdat[malai >= 6]$id %>% unique
+vec_ids <- out[id%in%vec_ids][r2>0.5]$id
+out[id %in% vec_ids] %>% 
+  expand_grid(post_days=seq(0,5000)) %>% 
+  mutate(pred = K/(1 + ((K-L0)/L0)*exp(-r*post_days))) %>% 
+  ggplot(data=.,aes(post_days,pred,group=id,color=r2))+
+  geom_line()+
+  geom_point(data=mdat[id%in%vec_ids], aes(post_days,slai),inherit.aes = F)+
+  facet_wrap(~id)+
+  scale_color_viridis_c()
+theme(legend.position = 'none')
+
+sdat[id%in%vec_ids]$malai
+mdat$slai %>% hist
+
+
+merge(sdat,out,by='id')[sample(.N,1e5)] %>% 
+  ggplot(data=.,aes(malai,r))+
+  geom_point(alpha=0.1,size=0.1)+
+  geom_abline(col='red')
+
+
+fn_logistic_growth <- function(din){
+  start_day <- din[post_days <= 366][slai == min(slai)]$post_days[1]
+  din <- din[(post_days>=start_day) & (post_days<=(ttr5_lai+365))]
+  upper_K <- din$malai[1]+2*din$lai_yr_sd[1]
+  lower_K <- din$malai[1]-2*din$lai_yr_sd[1]
+  upper_L0 <- din$malai[1]+2*din$lai_yr_sd[1]
+  lower_L0 <- 0.1
+  
+  try(fit <- nls_multstart(slai ~ K/(1 + ((K-L0)/L0)*exp(-r*post_days)), 
+                           data=din,
+                           # iter=1,
+                           iter=10,
+                           supp_errors = 'Y',
+                           start_lower = c(K=0.1*lower_K, L0=0.01, r=0),
+                           start_upper = c(K=0.9*upper_K, L0=0.9*upper_K, r=0.001), 
+                           lower= c(K=lower_K, L0=lower_K, r=0.0001), 
+                           upper = c(K=upper_K, 
+                                     L0=lower_K, 
+                                     r=0.3))
+      ,silent = TRUE)
+  if(exists('fit')==FALSE){
+    out <- data.table(K=NA_real_,L0=NA_real_,r=NA_real_,isConv=FALSE,r2=NA_real_,rmse=NA_real_)
+  }
+  try(if(exists('fit')==TRUE & is.null(fit)==TRUE){
+    out <- data.table(K=NA_real_,L0=NA_real_,r=NA_real_,isConv=FALSE,r2=NA_real_,rmse=NA_real_)
+  }
+  ,silent=TRUE)
+  try(if(exists('fit')==TRUE & is.null(fit)==FALSE){
+    out <- fit %>% coef(.) %>% t() %>% as.data.table()
+    out$isConv <- fit$convInfo$isConv
+    out$r2 <- yardstick::rsq_trad_vec(truth = din$slai, 
+                                      estimate = predict(fit))
+    out$rmse <- yardstick::rmse_vec(truth = din$slai, 
+                                    estimate = predict(fit))
+    
+  },silent=TRUE)
+  out$nobs_til_recovery <- nrow(din)
+  return(out)
+}
+bads <- out[K==max(K)]$id %>% unique %>% sample(5000)
+bads2 <- out[r==max(r)]$id
+
+fn_logistic_growth(mdat[id==bads2[1]])
+mdat[id%in%bads2][(post_days<=(ttr5_lai+2000))] %>% 
+  ggplot(data=.,aes(post_days,slai))+geom_point()+
+  geom_hline(aes(yintercept=malai))
+
+out[id%in%bads2] %>% ggplot(data=.,aes(L0,K))+geom_point()+geom_abline()
+
+
+
+
+plan(multisession, workers=10)
+system.time(test <- mdat[id%in%bads] %>% 
+              split(.$id) %>%
+              future_map(~fn_logistic_growth(.x),.progress = TRUE) %>% 
+              future_map_dfr(~ as_tibble(.), .id='id')
+)
+plan(sequential)
+setDT(test)
+test[,`:=`(id=as.integer(id))]
+
+
+merge(sdat,out,by='id') %>% 
+  ggplot(data=.,aes(malai,K))+
+  geom_point(alpha=0.1,size=0.5)+
+  geom_abline(col='red')
+
+dev.new()
+merge(sdat,test,by='id') %>% 
+  ggplot(data=.,aes(malai,K))+
+  geom_point(alpha=0.1,size=0.5)+
+  geom_abline(col='red')
