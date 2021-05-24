@@ -4381,7 +4381,23 @@ setDT(test)
 test[,`:=`(id=as.integer(id))]
 
 
-merge(sdat,out,by='id') %>% 
+fn_logistic_growth(mdat[id==70])
+
+vec_ids <- unique(mdat$id) %>% sample(50000)
+plan(multisession, workers=10)
+system.time(test <- mdat[id%in%vec_ids] %>% 
+              split(.$id) %>%
+              future_map(~fn_logistic_growth(.x),.progress = TRUE) %>% 
+              future_map_dfr(~ as_tibble(.), .id='id')
+)
+plan(sequential)
+setDT(test)
+test[,`:=`(id=as.integer(id))]
+
+
+test$isConv %>% table
+
+merge(sdat,test,by='id') %>% 
   ggplot(data=.,aes(malai,K))+
   geom_point(alpha=0.1,size=0.5)+
   geom_abline(col='red')
@@ -4391,3 +4407,320 @@ merge(sdat,test,by='id') %>%
   ggplot(data=.,aes(malai,K))+
   geom_point(alpha=0.1,size=0.5)+
   geom_abline(col='red')
+
+test[id %in% vec_ids[1:10]] %>% 
+  expand_grid(post_days=seq(0,5000,length.out = 100)) %>% 
+  mutate(pred = K/(1 + ((K-L0)/L0)*exp(-r*post_days))) %>% 
+  ggplot(data=.,aes(post_days,pred,group=id,color=r2))+
+  geom_line()+
+  geom_point(data=mdat[id%in%vec_ids[1:10]], 
+             aes(post_days,slai_12mo),inherit.aes = F)+
+  facet_wrap(~id)+
+  scale_color_viridis_c()
+
+
+
+test %>% select(K,L0,r,r2) %>% as_tibble() %>% summary
+
+fits[r<0.1] %>% 
+  ggplot(data=.,aes(pH,r))+
+  geom_point(size=0.1,alpha=0.1)+
+  geom_smooth(method='lm')
+
+
+fits[r<0.1][,.(idx_awap, r,pH,silt,sand,clay,pto,nto,malai,elevation,des,der, 
+               lai_yr_sd,tpi,ece)] %>% 
+  merge(., clim[,.(idx_awap)], by=c("idx_awap")) %>% 
+  drop_na() %>% 
+  as_tibble() %>% 
+  cor() %>% 
+  corrplot::corrplot(method='number')
+
+
+merge(fits[date==date_fire1][r<0.1], clim[,.(date, idx_awap,post_precip_anom_12mo)],
+      by=c("idx_awap","date")) %>% 
+  ggplot(data=.,aes(post_precip_anom_12mo,r))+
+  geom_point(size=0.1,alpha=0.1)+
+  geom_smooth(method='lm')
+
+fits[r<0.1]$r %>% quantile(., 0.95)
+fits[r<0.1] %>% ggplot(data=.,aes(x,y,fill=r))+
+  geom_tile()+
+  scale_fill_viridis_b(limits=c(0,0.01),n.breaks=5)+
+  coord_equal()
+
+
+nls_multstart(val~exp(alpha/(beta+min_nbr_anom**2)), 
+              data=merge(fits, d_nbr, by='id') %>%
+                .[sample(.N,10000)][,val:=(L0/K)], 
+              iter = 100, 
+              start_lower = c(alpha=-5,beta=2),
+              start_upper = c(alpha=-1,beta=3))
+
+
+merge(fits, d_nbr, by='id') %>%
+  .[sample(.N,10000)] %>% .[min_nbr_anom >= -1] %>%
+  ggplot(data=.,aes(min_nbr_anom, ttr5_lai))+
+  ggpointdensity::geom_pointdensity(size=0.25)+
+  geom_smooth(color='red')+
+  scale_color_viridis_c(option='B')+
+  theme_linedraw()+
+  labs(x='NBR Anomaly', 
+       y=expression(paste(L[0]/K)))
+
+
+
+jj %>% lazy_dt() %>% 
+  filter(date > date_fire1) %>% 
+  filter(date <= date_recovery) %>% 
+  group_by(id) %>% 
+  summarize(ttr = unique(ttr5_lai), 
+            mcwd = min(cwd,na.rm=TRUE)) %>% 
+  ungroup() %>% 
+  as_tibble() %>% 
+  ggplot(data=.,aes(mcwd,ttr))+
+  geom_point(size=0.1,alpha=0.1) +
+  geom_smooth()+
+  geom_smooth(method='gam',
+              formula=y~s(x,bs='cs'),
+              method.args=list(family=scat(),
+                               select=TRUE,
+                               method='REML'), 
+              col='red')
+
+
+jj[vc %in% c(2,3,5)] %>% lazy_dt() %>% 
+  filter(date > date_fire1) %>% 
+  filter(date <= date_recovery) %>% 
+  group_by(id,vc_name) %>% 
+  summarize(ttr = unique(ttr5_lai), 
+            mcwd = min(cwd,na.rm=TRUE)) %>% 
+  ungroup() %>% 
+  as_tibble() %>% 
+  ggplot(data=.,aes(mcwd,ttr,
+                    group=cut_number(mcwd,5)))+
+  # geom_point(size=0.1,alpha=0.1,color='black')+
+  geom_smooth(method='lm')+
+  geom_smooth(col='red',
+              inherit.aes = F,
+              aes(mcwd,ttr), 
+              method='gam', 
+              formula=y~s(x,bs='cs',k=5))+
+  facet_wrap(~vc_name,ncol=1)
+
+
+jj[vc %in% c(2,3,5)] %>% lazy_dt() %>% 
+  filter(date > date_fire1) %>% 
+  filter(date <= (date_fire1+months(24))) %>% 
+  group_by(id,vc_name) %>% 
+  summarize(ttr = unique(ttr5_lai),
+            r = unique(r),
+            delta = median(L0/K),
+            mcwd = min(cwd,na.rm=TRUE)) %>% 
+  ungroup() %>% 
+  as_tibble() %>% 
+  ggplot(data=.,aes(mcwd,r,
+                    group=cut_number(mcwd,5)))+
+  # geom_point(size=0.1,alpha=0.1,color='black')+
+  geom_smooth(method='lm', 
+              aes(mcwd,r),inherit.aes = F, 
+              col='black')+
+  geom_smooth(method='lm')+
+  geom_smooth(col='red',
+              inherit.aes = F,
+              aes(mcwd,r),
+              method='gam',
+              formula=y~s(x,bs='cs',k=5))+
+  facet_wrap(~vc_name,ncol=1)
+
+
+jj[vc %in% c(2,3,5)] %>% lazy_dt() %>% 
+  filter(date > date_fire1) %>% 
+  filter(date <= (date_fire1+months(24))) %>% 
+  group_by(id,vc_name) %>% 
+  summarize(ttr = unique(ttr5_lai),
+            r = unique(r),
+            delta = median(L0/K),
+            mcwd = min(cwd,na.rm=TRUE)) %>% 
+  ungroup() %>% 
+  as_tibble() %>% 
+  bam(r ~ s(delta,by=vc_name,k=5)+
+            s(mcwd,by=vc_name,k=5)+
+            s(vc_name,bs='re'), 
+      data=., 
+      # family=Gamma(link='log'), 
+      select=TRUE,
+      discrete = TRUE) %>% 
+  summary()
+
+ggplot()+
+  geom_stars(data=st_as_stars(sm))+
+  scale_fill_gradientn(colors=pals::turbo())
+
+plot(st_as_stars(sm))
+plot(st_as_stars(grid),col=pals::turbo(),breaks='equal')
+
+st_as_stars(sm) %>% 
+  as_tibble() %>% 
+  filter(is.na(layer)==F) %>% 
+  pull(layer) %>% 
+  table %>% sort
+
+
+at$trait_name %>% unique %>% sort
+at[trait_name=="fire_response"]$value %>% table
+
+
+out3
+unique(at$taxon_name)
+
+
+
+merge(out1[,.(x,y,dom_sp, r,L0,K,fire_month)][fire_month %in% c(9,10,11,12,1,2,3)],
+      unique(ala[,.(species_id,species)]), by.x='dom_sp', by.y='species_id',allow.cartesian = T) %>% 
+  merge(., sp_fac, by='species')
+
+sort(table(at$trait_name))
+at[trait_name=='flowering_time']$value
+at[trait_name=='life_history']$value
+at[trait_name=='regen_strategy']$value %>% table
+
+
+
+v10 <- ala_mq[,.(nobs=.N),by='species'][,rank:=frank(-nobs)][order(rank)][rank <= 10]
+ala_mq[species%in%vec20$dom_sp] %>%
+  ggplot(data=.,aes(species,y=hnd))+
+  geom_boxplot(outlier.colour = NA)+
+  coord_flip()
+
+ala_mq[species%in%v10$species] %>%
+  ggplot(data=.,aes(tpi,hnd))+
+  geom_point()
+
+
+ala_mq$species %>% unique %>% sort
+ala_mq[species=="Angophora bakeri subsp. crassifolia"] %>% 
+  .[]
+
+tmp <- "Angophora bakeri subsp. crassifolia"
+"Eucalyptus tricarpa subsp. decora"
+str_detect(tmp, " subsp. ")
+str_split(tmp,)
+
+# ala_mq %>% 
+#   lazy_dt() %>% 
+#   mutate(species = case_when(str_detect(species, " subsp. ")==T ~ ))
+
+
+fn <- function(x){
+  x <- str_remove(x, " sp.")
+  x <- str_remove(x, " subsp.")
+  v <- unlist(str_split(x,pattern = " "))[1:2]
+  v_out <- paste0(v[1]," ",v[2])
+  return(v_out)
+}
+fn(tmp)
+
+ala_mq %>% lazy_dt() %>% 
+  rowwise() %>% 
+  mutate(species = fn(species)) %>% 
+  ungroup() %>% 
+  show_query()
+
+apply(ala_mq[1:100,], 1, fn, 'species')
+
+all_vars <- names(ala_mq)
+ala_mq[100:110,][,fn(.SD), .SDcols=all_vars]
+ala_mq[,fn(.SD), .SDcols='species']
+
+
+
+DT[, lapply(.SD, mean),
+   .SDcols = c("V1", "V2")]
+
+ala_mq[sample(.N,10)][, lapply(.SD, fn), .SDcols=c("species")]
+tmp <- ala_mq[sample(.N,10)]
+tmp[,sp2 := fn(species),by=seq_len(nrow(tmp))][]
+
+fn(ala_mq$species[100])
+ala_mq$species[100]
+
+ala_mq[str_detect(species,"folia")==T]
+
+ala_mq[str_detect(taxon,"Mt")==T]
+fn(ala_mq[str_detect(taxon,"sparsifolia")==T]$species)
+
+str_remove("Eucalyptus sparsifolia"," sp\\.")
+ala_mq[str_detect(taxon,'Corymbia sp.')]$taxon %>% fn
+str_remove("Corymbia sp. Springsure (M.I.Brooker 9786)"," sp\\.")
+ala_mq$species %>% unique() %>% sort
+
+
+
+
+
+out_mq$dom_sp %>% unique
+out_mq$dom_sp %>% table %>% sort %>% as.data.frame()
+
+vec20
+
+
+
+km5 <- kmeans(dkm[,.(elev,slope,hnd,aspect)] %>% as.matrix(), 5)
+dkm %>% ggplot(data=.,aes(hnd,aspect,color=factor(km5$cluster)))+
+  geom_point()+
+  scale_color_viridis_d()
+
+
+st_as_stars(clim)
+
+ggplot()+
+  geom_stars(data=rclim["map"])+
+  geom_point(data=ala_mq,aes(x,y),col='red')+
+  geom_point(data=out_mq,aes(x,y),col='orange')+
+  coord_sf()
+
+
+apply(dkm, 2,function(x) sum(is.na(x)))
+dkm_s <- apply(dkm[,.(elev,slope,hnd,aspect, 
+       map,mapet,matmax,matmin,mavpd15)], 2, scale)
+
+km5 <- kmeans(dkm_s, 4)
+dkm[,cluster:=km5$cluster] %>% 
+  as_tibble() %>% 
+  ggplot(data=.,aes(x,y,color=factor(cluster)))+
+  geom_point()+
+  scale_color_brewer(palette='Set1')+
+  coord_sf()
+
+dkm[,cluster:=km5$cluster] %>% 
+  .[,direction := case_when(between(aspect,360-45,45)~'N',
+                            between(aspect,45,90+45)~'E',
+                            between(aspect,90+45,270-45)~'S',
+                            between(aspect,270-45,270+45)~'W')] %>% 
+  as_tibble() %>% 
+  ggplot(data=.,aes(x,y,color=aspect))+
+  geom_point()+
+  scico::scale_color_scico(palette='romaO')+
+  coord_sf()
+
+
+dkm[,cluster:=km5$cluster] %>% 
+  .[,direction := case_when(between(aspect,315,360)~'N',
+                            between(aspect,0,45)~'N',
+                            between(aspect,45,135)~'E',
+                            between(aspect,135,225)~'S',
+                            between(aspect,225,315)~'W')] %>% 
+  ggplot(data=.,aes(direction,aspect))+
+  geom_boxplot()
+
+dkm[,cluster:=km5$cluster] %>% 
+  .[,direction := case_when(between(aspect,315,360)~'N',
+                            between(aspect,0,45)~'N',
+                            between(aspect,45,135)~'E',
+                            between(aspect,135,225)~'S',
+                            between(aspect,225,315)~'W')] %>% 
+  ggplot(data=.,aes(x,y,color=direction))+
+  geom_point()+
+  coord_sf()+
+  scale_color_viridis_d(option='H')

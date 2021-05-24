@@ -14,6 +14,7 @@ sdat <- read_parquet("../data_general/proc_data_Oz_fire_recovery/fit_mod-terra-s
 
 # some smoothed lai values got slightly negative, so resetting to ~0.01
 dat[,`:=`(slai=ifelse(slai<0.01,0.01,slai))]
+dat[,`:=`(slai_12mo=slai_anom+malai)]
 
 #! Only fitting locations where the recovery was at least one year
 sdat <- sdat[is.na(ttr5_lai)==FALSE][date_fire1<ymd('2015-01-01')][ttr5_lai>=365]
@@ -38,38 +39,40 @@ rm(dat); gc(full=TRUE)
 
 
 fn_logistic_growth <- function(din){
-  start_day <- din[post_days <= 366][slai == min(slai)]$post_days[1]
+  start_day <- din[post_days <= 366][slai_12mo == min(slai_12mo)]$post_days[1]
   din <- din[(post_days>=start_day) & (post_days<=(ttr5_lai+365))]
   upper_K <- din$malai[1]+2*din$lai_yr_sd[1]
   lower_K <- din$malai[1]-2*din$lai_yr_sd[1]
+  lower_K <- min(c(0.1,lower_K),na.rm=TRUE)
   upper_L0 <- din$malai[1]+2*din$lai_yr_sd[1]
-  lower_L0 <- 0.1
+  lower_L0 <- 0.05
   
-  try(fit <- nls_multstart(slai ~ K/(1 + ((K-L0)/L0)*exp(-r*post_days)), 
+  try(fit <- nls_multstart(slai_12mo ~ K/(1 + ((K-L0)/L0)*exp(-r*post_days)), 
                            data=din,
                            # iter=1,
-                           iter=10,
+                           iter=20,
                            supp_errors = 'Y',
                            start_lower = c(K=0.1*lower_K, L0=0.01, r=0),
                            start_upper = c(K=0.9*upper_K, L0=0.9*upper_K, r=0.001), 
-                           lower= c(K=lower_K, L0=lower_K, r=0.0001), 
+                           lower= c(K=lower_K, L0=lower_L0, r=0.0001), 
                            upper = c(K=upper_K, 
-                                     L0=lower_K, 
-                                     r=0.3))
+                                     L0=upper_L0, 
+                                     r=0.025))
       ,silent = TRUE)
   if(exists('fit')==FALSE){
-    out <- data.table(K=NA_real_,L0=NA_real_,r=NA_real_,isConv=FALSE,r2=NA_real_,rmse=NA_real_)
+    out <- data.table(K=NA_real_,L0=NA_real_,r=NA_real_,isConv=FALSE,start_day=NA_real_,r2=NA_real_,rmse=NA_real_)
   }
   try(if(exists('fit')==TRUE & is.null(fit)==TRUE){
-    out <- data.table(K=NA_real_,L0=NA_real_,r=NA_real_,isConv=FALSE,r2=NA_real_,rmse=NA_real_)
+    out <- data.table(K=NA_real_,L0=NA_real_,r=NA_real_,isConv=FALSE,start_day=NA_real_,r2=NA_real_,rmse=NA_real_)
   }
   ,silent=TRUE)
   try(if(exists('fit')==TRUE & is.null(fit)==FALSE){
     out <- fit %>% coef(.) %>% t() %>% as.data.table()
     out$isConv <- fit$convInfo$isConv
-    out$r2 <- yardstick::rsq_trad_vec(truth = din$slai, 
+    out$start_day <- start_day
+    out$r2 <- yardstick::rsq_trad_vec(truth = din$slai_12mo, 
                                       estimate = predict(fit))
-    out$rmse <- yardstick::rmse_vec(truth = din$slai, 
+    out$rmse <- yardstick::rmse_vec(truth = din$slai_12mo, 
                                     estimate = predict(fit))
     
   },silent=TRUE)
@@ -88,18 +91,58 @@ fn_logistic_growth <- function(din){
 
 # furrr approach -----------------------------------------------
 
+vec_ids <- unique(mdat$id)
+vec1 <- split(vec_ids, cut(seq_along(vec_ids), 4, labels = FALSE))[[1]]
+vec2 <- split(vec_ids, cut(seq_along(vec_ids), 4, labels = FALSE))[[2]]
+vec3 <- split(vec_ids, cut(seq_along(vec_ids), 4, labels = FALSE))[[3]]
+vec4 <- split(vec_ids, cut(seq_along(vec_ids), 4, labels = FALSE))[[4]]
+
+
 gc(full=TRUE)
 plan(multisession, workers=20)
-system.time(out <- mdat %>% 
+system.time(out1 <- mdat[id%in%vec1] %>% 
               split(.$id) %>%
               future_map(~fn_logistic_growth(.x),.progress = TRUE) %>% 
               future_map_dfr(~ as_tibble(.), .id='id')
 )
+gc(full=T)
+setDT(out1)
+out1[,`:=`(id=as.integer(id))]
 plan(sequential)
-setDT(out)
-out[,`:=`(id=as.integer(id))]
+plan(multisession, workers=20)
+system.time(out2 <- mdat[id%in%vec2] %>% 
+              split(.$id) %>%
+              future_map(~fn_logistic_growth(.x),.progress = TRUE) %>% 
+              future_map_dfr(~ as_tibble(.), .id='id')
+)
+gc(full=T)
+setDT(out2)
+out2[,`:=`(id=as.integer(id))]
+plan(sequential)
+plan(multisession, workers=20)
+system.time(out3 <- mdat[id%in%vec3] %>% 
+              split(.$id) %>%
+              future_map(~fn_logistic_growth(.x),.progress = TRUE) %>% 
+              future_map_dfr(~ as_tibble(.), .id='id')
+)
+gc(full=T)
+setDT(out3)
+out3[,`:=`(id=as.integer(id))]
+plan(sequential)
+plan(multisession, workers=20)
+system.time(out4 <- mdat[id%in%vec4] %>% 
+              split(.$id) %>%
+              future_map(~fn_logistic_growth(.x),.progress = TRUE) %>% 
+              future_map_dfr(~ as_tibble(.), .id='id')
+)
+gc(full=T)
+setDT(out4)
+out4[,`:=`(id=as.integer(id))]
+plan(sequential)
+out <- rbindlist(list(out1,out2,out3,out4),use.names = TRUE)
+gc(full=T)
 arrow::write_parquet(merge(out, sdat, by=c("id")), 
-                     sink=paste0("../data_general/proc_data_Oz_fire_recovery/slai_logisticGrowthModel_recoveryTrajectoryfits_1burn_2001-2014fires_",Sys.time(),".parquet"))
+                     sink=paste0("../data_general/proc_data_Oz_fire_recovery/slai12mo_logisticGrowthModel_recoveryTrajectoryfits_1burn_2001-2014fires_",Sys.time(),".parquet"))
 # END ****************************************************************
 
 # # Load if not refitting

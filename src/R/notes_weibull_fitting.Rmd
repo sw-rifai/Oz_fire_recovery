@@ -1,0 +1,128 @@
+---
+title: "Weibull fitting notes"
+output:
+  html_document:
+    df_print: paged
+---
+```{r}
+library(tidyverse)
+library(data.table)
+library(arrow)
+```
+
+# Prep data -------------------------------------------------------------------
+```{r}
+dat <- arrow::read_parquet("/home/sami/scratch/mcd43_se_coastal_nir_red_fire_cci.parquet", 
+                           col_select = c("x","y","id","date","ndvi_anom"))
+
+load("outputs/pixel_vegClass_groups.rds")
+sdat <- read_parquet("outputs/weibull_fits_pre2005_fires_2021-01-18.parquet")
+tmp2 <- expand_grid(merge(sdat,nvis, by='id') %>% 
+                      filter(vc!=25) %>%
+                      filter(vc %in% c(2,3,4,5,11)) %>% 
+                      filter(is.na(vc)==FALSE) %>% 
+                      sample_n(100), 
+                    pred_days=seq(1,2000,length.out=2000) %>% floor) %>% 
+  mutate(pred = SSweibull(x=pred_days, Asym, Drop, lrc, pwr), 
+         p_diff = Drop*pwr*pred_days^pwr*exp(lrc)*exp(-pred_days^pwr*exp(lrc))/pred_days) %>% 
+  as.data.table()
+
+```
+
+The Weibull function: $$Asym-Drop*e^{(-e^{({lrc})}*x^{pwr})}$$
+This is the SSweibull() maybe unusual functional form.
+
+The pwr term should be >= 0 to enforce positive or flat response. 
+```{r}
+expand_grid(tibble(Asym=0,Drop=0.3,lrc=-1.17e1),
+            pwr=seq(-0.1,0.1,length.out = 5),
+            pred_days=seq(1,2000,length.out=2000) %>% floor) %>% 
+  mutate(pred = SSweibull(x=pred_days, Asym, Drop, lrc, pwr), 
+         p_diff = Drop*pwr*pred_days^pwr*exp(lrc)*exp(-pred_days^pwr*exp(lrc))/pred_days) %>% 
+  as.data.table() %>% 
+  ggplot(data=.,aes(pred_days,pred,color=factor(pwr)))+
+  geom_line()+
+  scale_color_viridis_d()+
+  facet_wrap(~pwr,scales='free')
+
+```
+Rapidly recovering pixels tend to have lrc > -10 & pwr < 3.  
+```{r}
+tmp2 %>% ggplot(data=.,aes(pred_days, pred, color=pwr, group=id))+
+  geom_line()+
+  scale_color_viridis_c(option='B')+
+  facet_wrap(~cut_number(lrc,4), scales = 'fixed',labeller = label_both)
+```
+
+
+
+lrc term: 
+```{r}
+expand_grid(tibble(Asym=0,Drop=0.3,pwr=0.9),
+            lrc=seq(-50,50,length.out = 6),
+            pred_days=seq(1,2000,length.out=2000) %>% floor) %>% 
+  mutate(pred = SSweibull(x=pred_days, Asym, Drop, lrc, pwr), 
+         p_diff = Drop*pwr*pred_days^pwr*exp(lrc)*exp(-pred_days^pwr*exp(lrc))/pred_days) %>% 
+  as.data.table() %>% 
+  mutate(lrc=factor(lrc)) %>% 
+  ggplot(data=.,aes(pred_days,pred,color=lrc))+
+  geom_line()+
+  scale_color_viridis_d()+
+  facet_wrap(~lrc,scales='free')
+
+```
+
+
+```{r}
+tmp2 %>% ggplot(data=.,aes(pred_days, pred, color=lrc, group=id))+
+  geom_line()+
+  scale_color_viridis_c(option='B')+
+  facet_wrap(~cut_number(lrc,4), scales = 'fixed', labeller = label_both)
+
+```
+
+Isolating the slow to recover pixels
+```{r}
+tmp2[lrc < -6] %>% ggplot(data=.,aes(pred_days, pred, color=lrc, group=id))+
+  geom_line()+
+  scale_color_viridis_c(option='B')+
+  facet_wrap(~cut_number(lrc,4), scales = 'fixed', labeller = label_both)
+```
+
+Isolating the slowest to recover pixels:
+```{r}
+expand_grid(merge(sdat[lrc < -100],nvis, by='id') %>% 
+                      filter(vc!=25) %>%
+                      filter(vc %in% c(2,3,4,5,11)) %>% 
+                      filter(is.na(vc)==FALSE) %>% 
+                      sample_n(100), 
+                    pred_days=seq(1,2000,length.out=2000) %>% floor) %>% 
+  mutate(pred = SSweibull(x=pred_days, Asym, Drop, lrc, pwr), 
+         p_diff = Drop*pwr*pred_days^pwr*exp(lrc)*exp(-pred_days^pwr*exp(lrc))/pred_days) %>% 
+  as.data.table() %>% 
+  ggplot(data=.,aes(pred_days, pred, color=lrc, group=id))+
+  geom_line()+
+  scale_color_viridis_c(option='B',end=0.9)+
+  facet_wrap(~cut_number(lrc,4), scales = 'fixed', labeller = label_both)
+```
+
+```{r}
+dat[id %in% sdat[lrc < -100]$id] %>%
+  .[id==86967] %>% 
+  ggplot(data=.,aes(date,ndvi_anom))+
+  geom_point()
+```
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+plot(cars)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.

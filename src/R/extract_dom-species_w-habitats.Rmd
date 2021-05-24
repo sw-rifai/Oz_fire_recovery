@@ -1,0 +1,231 @@
+---
+title: "Extract ALA Dominant Tree Species"
+author: "Sami Rifai"
+date: "5/18/2021"
+output: html_document
+---
+
+Notes: set project directory as working directory
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,cache = TRUE,warning = F,message = F)
+```
+```{r}
+library(tidyverse)
+library(stars); 
+library(dtplyr)
+library(data.table) 
+library(lubridate)
+library(arrow)
+library(furrr)
+```
+
+
+## Load data
+```{r}
+ala_mq <- fread("../data_general/ALA/Gallagher_cleaned/euc_occurrence_clean.csv") %>% 
+  rename( 
+         x=longitude,
+         y=latitude) %>% 
+  as.data.table() %>% 
+  .[x>=140 & y <= -23 & y>=-40]
+rtpi <- read_stars("../data_general/Oz_misc_data/mtpi_alos_500m_SE_coastal.tif") %>% 
+  set_names('tpi')
+rdem <- read_stars("../data_general/Oz_misc_data/DEM-H_500m_SE_coastal.tif") %>% 
+  set_names('elevation')
+rslope <- read_stars("../data_general/Oz_misc_data/slope_wwfhydrosheds_500m_SE_coastal.tif") %>%   set_names('slope')
+raspect <- read_stars("../data_general/Oz_misc_data/aspect_wwfhydrosheds_500m_SE_coastal.tif") %>% 
+  set_names('aspect')
+rhnd <- read_stars("../data_general/Oz_misc_data/mert_hnd_500m_SE_coastal.tif") %>% 
+  set_names("hnd")
+```
+
+## Load AWAP mean annual climate
+```{r}
+clim <- arrow::read_parquet("/home/sami/scratch/awap_clim_se_coastal.parquet", 
+                            col_select = c("x","y","map","mapet","mappet",
+                                           "matmax","matmin","mavpd15")) %>% 
+  distinct() %>% 
+  as.data.table()
+```
+
+
+```{r}
+oz_poly <- sf::read_sf("../data_general/Oz_misc_data/gadm36_AUS_shp/gadm36_AUS_1.shp") %>% 
+  sf::st_simplify(., dTolerance = 0.1) %>% 
+  select(NAME_1)
+
+# fits --- 
+fits <- read_parquet("../data_general/proc_data_Oz_fire_recovery/slai12mo_logisticGrowthModel_recoveryTrajectoryfits_1burn_2001-2014fires_2021-04-26 15:23:33.parquet")
+fits <- fits[isConv==TRUE][r2>0][L0<K][L0>0][r<0.1]
+d_soil <- read_parquet("../data_general/Oz_misc_data/landscape_covariates_se_coastal.parquet")
+fits <- merge(fits,d_soil,by='id')
+rm(d_soil)
+
+# AusTraits --- 
+at <- fread("../data_general/AusTraits/austraits-2.1.0/data/traits.csv")
+# at[dataset_id=="Nicolle_2006"]$trait_name %>% unique
+# at[dataset_id=="Nicolle_2006"][trait_name=='fire_response']$value %>% table
+```
+
+
+## Simplify species names 
+```{r}
+fn <- function(x){
+  x <- str_remove(x, " sp\\.")
+  x <- str_remove(x, " subsp\\.")
+  v <- unlist(str_split(x,pattern = " "))[1:2]
+  v_out <- paste0(v[1]," ",v[2])
+  return(v_out)
+}
+ala_mq <- ala_mq[,species := fn(taxon),by=seq_len(nrow(ala_mq))]
+
+```
+
+
+## Find the most frequent species record within ±0.15°
+```{r}
+find1_mq <- function(din){
+  dl <- 0.15
+  px <- unique(din$x)
+  py <- unique(din$y)
+  vs <- ala_mq[x %between% c(px-dl,px+dl)][y %between% c(py-dl,py+dl)]$species
+  din$dom_sp <- get_mode(vs)
+  return(din)
+}
+get_mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+vec_ids <- unique(fits$id)
+vec1 <- split(vec_ids, cut(seq_along(vec_ids), 4, labels = FALSE))[[1]]
+vec2 <- split(vec_ids, cut(seq_along(vec_ids), 4, labels = FALSE))[[2]]
+vec3 <- split(vec_ids, cut(seq_along(vec_ids), 4, labels = FALSE))[[3]]
+vec4 <- split(vec_ids, cut(seq_along(vec_ids), 4, labels = FALSE))[[4]]
+
+# grpn <- nrow(fits)
+# system.time(
+#   out1_mq <- fits[,
+#                {cat("progress",.GRP/grpn*100,"%\n");
+#                find1_mq(.SD)},
+#                by=.(id)]
+# )
+
+```
+
+```{r}
+grpn <- nrow(fits[id%in%vec1])
+system.time(
+  out1_mq <- fits[id%in%vec1][,
+               # {cat("progress",.GRP/grpn*100,"%\n");
+               find1_mq(.SD),
+               # },
+               by=.(id)]
+)
+```
+```{r}
+grpn <- nrow(fits[id%in%vec2])
+system.time(
+  out2_mq <- fits[id%in%vec2][,
+               # {cat("progress",.GRP/grpn*100,"%\n");
+               find1_mq(.SD),
+               # },
+               by=.(id)]
+)
+```
+```{r}
+grpn <- nrow(fits[id%in%vec3])
+system.time(
+  out3_mq <- fits[id%in%vec3][,
+               # {cat("progress",.GRP/grpn*100,"%\n");
+               find1_mq(.SD),
+               # },
+               by=.(id)]
+)
+```
+```{r}
+grpn <- nrow(fits[id%in%vec4])
+system.time(
+  out4_mq <- fits[id%in%vec4][,
+               # {cat("progress",.GRP/grpn*100,"%\n");
+               find1_mq(.SD),
+               # },
+               by=.(id)]
+)
+```
+
+```{r}
+out_mq <- rbindlist(list(out1_mq,out2_mq,out3_mq,out4_mq))
+rm(out1_mq, out2_mq,out3_mq,out4_mq)
+```
+
+```{r}
+write_parquet(out_mq, sink="../data_general/proc_data_Oz_fire_recovery/ala-mq_1dom-sp_weibull-fit-1burn-locs.parquet")
+```
+
+
+
+```{r}
+vec20 <- out_mq[,.(nobs =.N),by='dom_sp'][,rank:=frank(-nobs)][order(rank)][rank<=21][is.na(dom_sp)==F]
+
+```
+
+```{r}
+out_mq[dom_sp%in%vec20$dom_sp] %>% 
+  ggplot(data=.,aes(x=dom_sp,y=r))+
+  geom_boxplot(outlier.colour = NA)+
+  coord_flip()
+
+```
+
+
+```{r}
+coords <- st_as_sf(ala_mq[,.(x,y)],coords=c("x","y"))
+st_crs(coords) <- st_crs(4326)
+```
+
+
+```{r}
+ala_mq$tpi <- st_extract(rtpi, coords) %>% st_drop_geometry() %>% .[,"tpi"]
+ala_mq$elev <- st_extract(rdem, coords) %>% st_drop_geometry() %>% .[,"elevation"]
+ala_mq$aspect <- st_extract(raspect, coords) %>% st_drop_geometry() %>% .[,"aspect"]
+ala_mq$slope <- st_extract(rslope, coords) %>% st_drop_geometry() %>% .[,"slope"]
+ala_mq$hnd <- st_extract(rhnd, coords) %>% st_drop_geometry() %>% .[,"hnd"]
+```
+
+### Generate dictionary of species habitats
+
+```{r}
+rclim <- st_as_stars(clim)
+st_crs(rclim) <- st_crs(4326)
+tmp <- st_extract(rclim, coords) %>% st_drop_geometry()
+ala_mq <- bind_cols(ala_mq,tmp) %>% as.data.table()
+rm(tmp)
+```
+
+
+```{r}
+dkm <- ala_mq[is.na(hnd)==F & is.na(elev)==F & is.na(aspect)==F & is.na(slope)==F]
+dkm <- dkm[is.na(map)==F & is.na(mavpd15)==F]
+dkm[,.(elev=median(elev), 
+       hnd = median(hnd), 
+       slope = median(slope), 
+       map = median(map), 
+       mapet = median(mapet), 
+       mappet = median(mappet), 
+       matmax = median(matmax), 
+       matmin = median(matmin), 
+       mavpd15 = median(mavpd15)), by='species'] %>% 
+  write_parquet(., sink="../data_general/proc_data_Oz_fire_recovery/ala-mq_species-median-clim-topo.parquet")
+km5 <- kmeans(dkm[,.(elev,slope,hnd,aspect)] %>% as.matrix(), 5)
+```
+
+
+```{r}
+ala_mq[species%in%vec20$dom_sp] %>% 
+  ggplot(data=.,aes(species,hnd))+
+  geom_boxplot(outlier.colour = NA)+
+  # coord_cartesian(xlim=c(0,500),ylim = c(0,500))+
+  coord_flip(ylim = c(0,500))
+```
