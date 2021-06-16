@@ -157,6 +157,7 @@ library(tune)
 library(dials)
 library(workflows)
 library(yardstick)
+library(themis)
 
 # speed up computation with parrallel processing (optional)
 # library(doParallel)
@@ -165,13 +166,24 @@ library(yardstick)
 
 # tidymodels_prefer()
 set.seed(123)
+dat2 <- dat %>% mutate(class = cut(ttr5_lai, breaks=c(0,366,750,1000,1500,2250,6000)))
+dat2 <- recipe(~ ., data=dat2) %>% 
+  step_downsample(class) %>% 
+  prep() %>% 
+  bake(new_data = NULL) %>% 
+  select(-class) %>% 
+  filter(is.na(ttr5_lai)==F)
+dim(dat2)
+median(dat2$ttr5_lai)
+hist(dat2$ttr5_lai)
 
-d_split <- initial_split(dat, strata = ttr5_lai)
+d_split <- initial_split(dat2, strata = 'ttr5_lai', prop = 0.8)
 d_train <- training(d_split)
-d_test <- testing(d_split)
+d_test <- initial_split(dat %>% sample_n(50000), strata = 'ttr5_lai', prop = 0.1) %>% 
+  testing()
 
 # Specify CV fold data ------------------------
-d_folds <- vfold_cv(d_train, strata = year, v=10)
+d_folds <- vfold_cv(d_train, strata = 'ttr5_lai',v=3)
 
 # Specify RF mod specs ------------------
 # xgb_spec <- boost_tree(mtry=4,
@@ -192,21 +204,29 @@ xgb_spec <- boost_tree(
   loss_reduction = tune(),                     ## first three: model complexity
   sample_size = tune(), 
   mtry = tune(),         ## randomness
-  learn_rate = tune(),                         ## step size
+  learn_rate = tune()                         ## step size
   ) %>% 
-  set_engine("xgboost") %>% 
+  set_engine("xgboost", 
+             nthread=4,
+             objective = 'reg:tweedie',
+             eval_metric = 'mape',
+             tweedie_variance_power = tune("tweedie_variance_power")
+             # tweedie_variance_power=1.9
+             ) %>% 
   set_mode("regression")
 
+xgb_spec %>% translate()
 # Specify 'Recipe' --------------------
-xgb_rec <- recipe(ttr5_lai ~ ., data=d_train) #%>% 
-  # update_role(year, new_role = 'ID')
+xgb_rec <- recipe(ttr5_lai ~ ., data=d_train) %>% 
+  update_role(year, new_role = 'ID')
+
 
 # Specify 'Workflow' ------------------
 xgb_wf <- workflow() %>%
-  add_formula(ttr5_lai ~ .) %>% 
-  # add_recipe(xgb_rec) %>% 
+  # add_formula(ttr5_lai ~ .) %>% 
+  add_recipe(xgb_rec) %>%
   add_model(xgb_spec) 
-  
+
 # test_fit <- xgb_wf %>% fit(data=d_train)
 #   
 # gc(full=T)
@@ -227,16 +247,21 @@ xgb_wf <- workflow() %>%
 
 
 # set up the grid of tuning parameters
-xgb_grid <- grid_max_entropy(   finalize(mtry(), d_train),
-                                trees(range=c(800,800)),
-                                min_n(range=c(3,5)),
-                                tree_depth(),
-                                learn_rate(range = c(0.005,0.05)),
-                                loss_reduction(range = c(1e-3,3e-3)),
-                                sample_size = sample_prop(c(0.6,0.9)),
+xgb_grid <- grid_latin_hypercube(   #finalize(mtry(), d_train),
+                                tweedie_variance_power = 
+                                  sample_prop(range=c(1.3,1.3)),
+                                mtry(range = c(5,5)),
+                                trees(range=c(1000,2000)),
+                                min_n(range=c(3,3)),
+                                tree_depth(range=c(8,8)), # 6,8
+                                learn_rate(range = c(0.005,0.015),trans = NULL),
+                                loss_reduction(range=c(0.02,0.02),trans = NULL),
+                                sample_size = sample_prop(c(0.55,0.55)),
                                 # finalize(sample_size(range=c(0,1)), d_train),
-                                size=20)
+                                size=10)
 xgb_grid
+
+
 
 doParallel::registerDoParallel()
 # doParallel::stopImplicitCluster()
@@ -245,7 +270,8 @@ xgb_res <- tune_grid(
   xgb_wf,
   resamples = d_folds,
   grid = xgb_grid,
-  control = control_grid(save_pred = TRUE)
+  control = control_grid(save_pred = TRUE),
+  metrics = metric_set(rmse, rsq, mpe)
 )
 xgb_res
 xgb_res$.notes[[1]]$.notes
@@ -256,8 +282,22 @@ collect_metrics(xgb_res)
 # Plot the model fits to the tuning parameters
 xgb_res %>%
   collect_metrics() %>%
+  filter(.metric == "mpe") %>%
+  filter(learn_rate > 0.005) %>% 
+  select(mean, mtry,tweedie_variance_power, trees, tree_depth, min_n,learn_rate,loss_reduction,  sample_size) %>%
+  pivot_longer(mtry:sample_size,
+               values_to = "value",
+               names_to = "parameter"
+  ) %>%
+  ggplot(aes(value, mean, color = parameter)) +
+  geom_point(show.legend = FALSE) +
+  facet_wrap(~parameter, scales = "free_x") +
+  labs(x = NULL, y = "MPE")
+xgb_res %>%
+  collect_metrics() %>%
   filter(.metric == "rmse") %>%
-  select(mean, mtry, tree_depth, min_n,learn_rate,loss_reduction,  sample_size) %>%
+  # filter(learn_rate > 0.005) %>% 
+  select(mean, mtry, trees,tweedie_variance_power, tree_depth, min_n,learn_rate,loss_reduction,  sample_size) %>%
   pivot_longer(mtry:sample_size,
                values_to = "value",
                names_to = "parameter"
@@ -270,7 +310,8 @@ xgb_res %>%
 xgb_res %>%
   collect_metrics() %>%
   filter(.metric == "rsq") %>%
-  select(mean, mtry, tree_depth, min_n,learn_rate,loss_reduction,  sample_size) %>%
+  filter(learn_rate > 0.005) %>% 
+  select(mean, mtry,trees, tweedie_variance_power, tree_depth, min_n,learn_rate,loss_reduction,  sample_size) %>%
   pivot_longer(mtry:sample_size,
                values_to = "value",
                names_to = "parameter"
@@ -280,8 +321,10 @@ xgb_res %>%
   facet_wrap(~parameter, scales = "free_x") +
   labs(x = NULL, y = "R2")
 
+best_mpe <- select_best(xgb_res, metric = 'mpe')
+best_mpe
 best_rmse <- select_best(xgb_res, metric = 'rmse')
-best_rmse
+best_rsq <- select_best(xgb_res, metric = 'rsq')
 
 final_fit <- finalize_model(xgb_spec, parameters = best_rmse)
 final_fit
@@ -293,8 +336,9 @@ test <- workflow() %>%
   add_formula(ttr5_lai ~ .) %>% 
   # add_recipe(xgb_rec) %>% 
   # add_model(xgb_spec) %>% 
-  add_model(final_fit %>% 
-              set_engine("xgboost", importance = "permutation")) %>% 
+  add_model(final_fit #%>% 
+              # set_engine("xgboost", objective = 'reg:tweedie', tweedie_variance_power=1.9)
+            ) %>% 
   fit(data=d_train)
 
 test$fit$fit %>% vip(geom='point')
@@ -313,48 +357,295 @@ test_prediction <- final_wf %>%
   ) %>%
   # use the training model fit to predict the test data
   predict(new_data = d_test) %>%
-  bind_cols(testing(d_split))
+  bind_cols(d_test)
+
+p1 <- test_prediction %>% 
+  sample_n(10000) %>% 
+  ggplot(data=.,aes(.pred, ttr5_lai))+
+  ggpointdensity::geom_pointdensity()+
+  geom_abline(col='red')+
+  geom_smooth(method='lm',col='orange')+
+  geom_hline(aes(yintercept=365),lty=3)+
+  geom_vline(aes(xintercept=365),lty=3)+
+  scale_color_viridis_c(option='H')+
+  coord_equal(ylim = c(0,3000),
+              xlim=c(0,3000), 
+              expand = F)+
+  theme_linedraw()+
+  labs(x='Predicted TTR (days)', 
+       y='Observed TTR (days)',
+       color='N')+
+  theme(legend.position = 'none'); p1
+
+p2 <- test_prediction %>% 
+  sample_n(10000) %>% 
+  ggplot(data=.,aes(ttr5_lai, .pred-ttr5_lai))+
+  ggpointdensity::geom_pointdensity()+
+  # geom_abline(col='red')+
+  geom_smooth(method='lm',col='orange')+
+  geom_hline(aes(yintercept=0),col='red')+
+  # geom_vline(aes(xintercept=365),lty=3)+
+  scale_color_viridis_c(option='H')+
+  coord_equal(#ylim = c(-3000,3000),
+    xlim=c(0,4000), 
+    expand = F)+
+  theme_linedraw()+
+  labs(y='Residual (days)', 
+       x='Observed TTR (days)',
+       color='N'); p2
+
+library(patchwork)
+p1+p2+plot_annotation(title='xgboost model')+plot_layout(guides='collect')
+ggsave(filename = "figures/xgboost_pred-obs_residuals-obs.png")
+
+# metrics=metric_set(rmse, rsq, mpe)
 
 # measure the accuracy of our model using `yardstick`
 xgboost_score <- 
   test_prediction %>%
-  yardstick::metrics(ttr5_lai, .pred) %>%
+  yardstick::metrics(ttr5_lai, .pred
+  ) %>%
   mutate(.estimate = format(round(.estimate, 2), big.mark = ","))
 
 knitr::kable(xgboost_score)
 
-final_res <- last_fit(final_wf, d_split)
+final_res <- last_fit(final_wf, 
+                      initial_split(dat2 %>% sample_n(50000), strata = 'ttr5_lai', prop = 0.1),
+                      metrics = metric_set(rmse,rsq,mpe))
 
 final_res %>%
   collect_metrics()
 
 final_res %>% 
   collect_predictions() %>% 
+  sample_n(10000) %>% 
   ggplot(data=.,aes(.pred, ttr5_lai))+
-  geom_point()+
-  geom_abline(col='red')
+  ggpointdensity::geom_pointdensity()+
+  geom_abline(col='red')+
+  geom_smooth(method='lm',col='orange')+
+  geom_hline(aes(yintercept=365),lty=3)+
+  geom_vline(aes(xintercept=365),lty=3)+
+  scale_color_viridis_c(option='H')+
+  coord_equal(ylim = c(0,3000),
+              xlim=c(0,3000), 
+              expand = F)+
+  theme_linedraw()+
+  labs(x='Predicted TTR (days)', 
+       y='Observed TTR (days)',
+       color='N')
+  
 
+final_res %>% 
+  collect_predictions() %>% 
+  sample_n(10000) %>% 
+  ggplot(data=.,aes(ttr5_lai, .pred-ttr5_lai))+
+  ggpointdensity::geom_pointdensity()+
+  # geom_abline(col='red')+
+  geom_smooth(method='lm',col='orange')+
+  geom_hline(aes(yintercept=0),col='red')+
+  # geom_vline(aes(xintercept=365),lty=3)+
+  scale_color_viridis_c(option='H')+
+  coord_equal(#ylim = c(-3000,3000),
+              xlim=c(0,4000), 
+              expand = F)+
+  theme_linedraw()+
+  labs(y='Residual (days)', 
+       x='Observed TTR (days)',
+       color='N')
+
+final_fit %>% translate()
 # MGCV comparison -----------
 library(mgcv)
-b1 <- bam(ttr5_lai~
-            te(malai, min_nbr_anom,mapet, k=5, bs='cs')+
-            te(map, post_precip_anom_12mo,post_vpd15_anom_12mo, k=5, bs='cs'),
-          # te(matmax,matmin, k=5, bs='cs')+
-          # s(mapet, k=5, bs='cs')+
-          # s(mavpd15, k=5, bs='cs')+
-          # s(post_vpd15_anom_12mo, k=5, bs='cs')+
-          # s(elevation, k=5, bs='cs'),
-          # te(map, 
-          #    min_nbr_anom,
-          #    post_precip_anom_12mo)+
-          # s(matmax,matmin)+
-          # s(mavpd15, post_vpd15_anom_12mo)+
-          # te(elevation,mapet),
-          data=d_train, 
-          select=TRUE, 
-          discrete=TRUE)
+b1 <- mgcv::bam( ttr5_lai ~
+                   # s(min_nbr_anom,m=1)+
+                   te(min_nbr_anom, elevation,malai)+ 
+                   # te(pre_fire_slai_anom_12mo,post_precip_anom_12mo)+
+                   # ti(min_nbr_anom, malai,m=3)+
+                   ti(min_nbr_anom, pre_fire_slai_anom_12mo,post_precip_anom_12mo),
+                   # ti(min_nbr_anom, pre_fire_slai_anom_12mo),
+                   # s(min_nbr_anom,k=5)+
+                   # s(elevation,k=5)+
+                   # s(pre_fire_slai_anom_12mo,k=5)+
+                   # s(post_precip_anom_12mo,k=5),
+                 # te(min_nbr_anom,elevation,pre_fire_slai_anom_12mo,
+                 #    post_vpd15_anom_12mo, k=6, bs='cs'),
+                 # te(map, post_precip_anom_12mo,post_vpd15_anom_12mo, k=5, bs='cs'),
+                 # te(matmax,matmin, k=5, bs='cs')+
+                 # s(mapet, k=5, bs='cs')+
+                 # s(mavpd15, k=5, bs='cs')+
+                 # s(post_vpd15_anom_12mo, k=5, bs='cs')+
+                 # s(elevation, k=5, bs='cs'),
+                 # te(map, 
+                 #    min_nbr_anom,
+                 #    post_precip_anom_12mo)+
+                 # s(matmax,matmin)+
+                 # s(mavpd15, post_vpd15_anom_12mo)+
+                 # te(elevation,mapet),
+                 data=d_train, 
+                 family=Gamma(link='log'),
+                 # weights = d_train$ttr5_lai,
+                 # weights = as.numeric(scale(d_train$ttr5_lai, center = F)),
+                 # family=Gamma(link='log'),
+                 select=TRUE, 
+                 discrete=TRUE)
 summary(b1)
 plot(b1, scheme=2, pages=1)
 
 yardstick::rsq_vec(d_test$ttr5_lai, 
                    estimate=predict(b1, newdata=d_test, type='response'))
+
+d_test %>% 
+  sample_n(5000) %>% 
+  mutate(pred = (predict(b1, newdata=., type='response'))) %>% 
+  ggplot(data=.,aes(ttr5_lai, I((pred-ttr5_lai)/ttr5_lai) ))+
+  geom_point()+
+  geom_hline(aes(yintercept=0),col="#cf0000")
+d_test %>% 
+  sample_n(5000) %>% 
+  mutate(pred = (predict(b1, newdata=., type='response'))) %>% 
+  mutate(res = pred-ttr5_lai) %>% 
+  ggplot(data=.,aes(ttr5_lai, res) )+
+  geom_point()+
+  geom_hline(aes(yintercept=0),col="#cf0000")
+d_test %>% 
+  sample_n(5000) %>% 
+  mutate(pred = exp(predict(b1, newdata=., type='response'))) %>% 
+  ggplot(data=.,aes(ttr5_lai, pred))+
+  geom_point()+
+  geom_abline(col='red')+
+  geom_smooth(method='lm')
+
+
+d_test %>% sample_n(1000) %>% 
+  ggplot(data=.,aes(I(exp(min_nbr_anom)), log(ttr5_lai)))+
+  geom_point()+
+  geom_smooth(method='lm')+
+  geom_abline(aes(intercept=7.64, slope=-1.47), col='red')
+
+l1 <- lm(log(ttr5_lai)~I(exp(min_nbr_anom)), data=d_test %>% sample_n(1000))
+plot(l1)
+summary(l1)
+d_test %>% 
+  sample_n(1000) %>% 
+  mutate(pred = exp(predict(l1, newdata=., type='response'))) %>% 
+  mutate(res = pred-ttr5_lai) %>% 
+  select(ttr5_lai, pred, res) %>% 
+  ggplot(data=.,aes(ttr5_lai, res))+
+  geom_point()+
+  labs(x='obs',y='residuals')
+d_test %>% 
+  sample_n(5000) %>% 
+  mutate(pred = exp(predict(l1, newdata=., type='response'))) %>% 
+  ggplot(data=.,aes(ttr5_lai, I((pred-ttr5_lai)/ttr5_lai) ))+
+  geom_point()+
+  geom_hline(aes(yintercept=0),col="#cf0000")
+
+
+d_test %>% 
+  sample_n(1000) %>% 
+  ggplot(data=.,aes(exp(min_nbr_anom**2), ttr5_lai))+
+  geom_point()+
+  geom_smooth(method='lm')
+
+
+junk <- d_train %>% 
+  mutate(mna = scale(min_nbr_anom)[,1])
+s1 <- gam(ttr5_lai ~ s(mna), 
+          data=junk)
+summary(s1)
+plot(s1)
+predict(s1) %>% hist
+junk$ttr5_lai %>% hist
+
+
+s1 <- mgcv::gam( log(ttr5_lai) ~ 
+                   s(exp(min_nbr_anom**2),k=5),
+                 data=d_train %>% mutate(x1 = exp(min_nbr_anom**2)),
+                 # family=nb(),
+                 select=F)
+summary(s1)
+plot(s1)
+junk <- d_train %>% 
+  mutate(pred1 = exp(as.numeric(predict(s1, newdata=., type='response'))))
+
+hist(exp(predict(s1,type='response')))
+
+s2 <- gam(log(ttr5_lai) ~ s(pred1), data=junk)
+plot(s2)
+junk %>% 
+  mutate(pred2 = exp(as.numeric(predict(s2,newdata=.,type='response')))) %>% 
+  sample_n(5000) %>% 
+  ggplot(data=.,aes(ttr5_lai, pred2-ttr5_lai))+
+  geom_point()
+
+d_train %>% 
+  sample_n(5000) %>% 
+  mutate(x1 = exp(min_nbr_anom**2)) %>% 
+  mutate(pred = exp(predict(s1, newdata=., type='response'))) %>% 
+  ggplot(data=.,aes(ttr5_lai, pred-ttr5_lai))+
+  geom_point()
+
+
+
+
+
+# TEST fits -----------------------
+xgb_spec <- boost_tree(
+  trees = 2000,
+  tree_depth = 6,
+  min_n = 4,
+  # loss_reduction = tune(),                     ## first three: model complexity
+  # sample_size = tune(), 
+  mtry = 6,         ## randomness
+  # learn_rate = tune(),                         ## step size
+) %>% 
+  set_engine("xgboost", 
+             nthread=4,
+             eval_metric = "mape",
+             objective = 'count:poisson',
+             # objective = 'reg:gamma',
+             # tweedie_variance_power=1.99
+  ) %>% 
+  set_mode("regression")
+
+xgb_spec %>% translate()
+# Specify 'Recipe' --------------------
+xgb_rec <- recipe(ttr5_lai ~ ., data=d_train) %>% 
+  update_role(year, new_role = 'ID')
+
+# Specify 'Workflow' ------------------
+xgb_wf <- workflow() %>%
+  # add_formula(ttr5_lai ~ .) %>% 
+  add_recipe(xgb_rec) %>%
+  add_model(xgb_spec) 
+
+test_fit <- last_fit(xgb_wf, d_split,metrics = metric_set(rmse,rsq,mpe))
+test_fit %>% collect_metrics()
+test_fit %>% collect_predictions() %>% 
+  sample_n(10000) %>% 
+  ggplot(data=.,aes(ttr5_lai, (.pred)-ttr5_lai))+
+  geom_point()+
+  geom_hline(aes(yintercept=0), col='red')
+
+test_fit %>% collect_predictions() %>% 
+  sample_n(10000) %>% 
+  ggplot(data=.,aes(.pred, ttr5_lai))+
+  ggpointdensity::geom_pointdensity()+
+  geom_abline(col='red')+
+  scale_color_viridis_c(option='H')
+
+
+
+#   
+# gc(full=T)
+# 
+# test_fit <- workflow() %>% 
+#   add_recipe(xgb_rec) %>% 
+#   add_model(boost_tree() %>% 
+#               set_mode('regression') %>% 
+#               update(mtry=3,
+#                      min_n=3,
+#                      tree_depth=4,
+#                      trees=100) %>% 
+#               set_engine("xgboost",nthread=12)) %>% 
+#   fit(d_train)
