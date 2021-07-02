@@ -18,7 +18,7 @@ dat <- arrow::read_parquet("../data_general/proc_data_Oz_fire_recovery/MOD15A2H_
                            col_select = c("x","y","id","date","slai","slai_anom_12mo","malai"))
 dat[,`:=`(slai_12mo = slai_anom_12mo+malai)]
 sdat <- read_parquet("../data_general/proc_data_Oz_fire_recovery/fit_mod-terra-sLAI_ttrDef5_preBS2021-04-26 06:01:53.parquet")
-fits <- read_parquet("../data_general/proc_data_Oz_fire_recovery/slai12mo_logisticGrowthModel_recoveryTrajectoryfits_1burn_2001-2014fires_2021-04-26 15:23:33.parquet")
+fits <- arrow::read_parquet("../data_general/proc_data_Oz_fire_recovery/slai-1mo_logisticGrowthModel_recoveryTrajectoryfits_1burn_2001-2014fires_2021-06-19 17:33:16.parquet")
 fits <- fits[isConv==TRUE][r2>0]
 d_soil <- read_parquet("../data_general/Oz_misc_data/landscape_covariates_se_coastal.parquet")
 clim <- arrow::read_parquet("/home/sami/scratch/awap_clim_se_coastal.parquet")
@@ -135,6 +135,89 @@ jj <- jj[,`:=`(cwd = f_cwd_r7(cwd_et=cwd,
 
 
 # PLOTS -------------------------------------------------------------------
+# Composite plot: ttr5~L0/K by year ----------------
+pan_b <- fits[year %in% fits[,.(nobs = .N),by='year'][,rank := frank(-nobs)][order(rank)][rank<=10]$year] %>% 
+  # sample_n(10000) %>% 
+  as_tibble() %>% 
+  mutate(fire_year = factor(year)) %>% 
+  ggplot(data=.,aes(ldk, ttr5_lai,color=fire_year,group=fire_year))+
+  # geom_point()+
+  geom_smooth(method='gam',
+              formula=y~s(x,k=5,bs='cs'),
+              method.args=list(select=TRUE))+
+  scale_color_viridis_d(option='H')+
+  labs(x=expression(paste(L[0]/K)), 
+       y='Time to Recover (days)',
+       color='Fire year')+
+  coord_cartesian(xlim=c(0,0.75), 
+                  expand=F)+
+  theme_linedraw()+
+  theme(panel.grid.minor = element_blank(), 
+        legend.position = 'bottom'); pan_b
+
+pan_c <- expand_grid(tibble(K=c(3,3,3),
+                   r=c(0.01, 0.002, 0.0075),
+                   L0=c(0.3,1.5,2)), 
+            post_days = floor(seq(1,3000,length.out=100))) %>% 
+  mutate(reduction = round(100*(1 - L0/K),digits=2)) %>% 
+  mutate(pred = K/(1 + ((K-L0)/L0)*exp(-r*post_days)) ) %>% 
+  mutate(recovered = ifelse(between(pred, 0.975*K, 0.98*K),pred,NA)) %>% 
+  ggplot(data=.,aes(post_days,pred,
+                    group=paste(r,L0,K), 
+                    color=factor(r)))+
+  geom_line()+
+  # geom_point(aes(post_days,recovered))+
+  labs(x='Days after fire',
+       y='LAI', 
+       color=expression(paste(bolditalic(r))))+
+  scale_color_brewer(palette='Set2')+
+  theme_linedraw()+
+  theme(panel.grid.minor = element_blank(), 
+        legend.position = 'bottom'); pan_c
+
+pan_a <- read_parquet("../data_general/proc_data_Oz_fire_recovery/slai12mo_logisticGrowthModel_recoveryTrajectoryfits_1burn_2001-2014fires_2021-04-26 15:23:33.parquet") %>% 
+  as.data.table() %>% 
+  .[isConv==TRUE] %>% 
+  .[r<0.05] %>% 
+  .[r2>0] %>% 
+  .[L0<K] %>% 
+  # .[r2>0.75] %>% 
+  ggplot(data=.,aes(L0/K,r,color=ttr5_lai))+
+  geom_point(alpha=0.5,size=0.5)+
+  geom_smooth(fullrange=T,
+              aes(L0/K,r),
+              color='#cf0000',
+              weight=3,
+              level=0.999)+
+  scale_color_viridis_c(option='F',
+                        limits=c(365,3000),
+                        direction = 1,
+                        end = 0.85,
+                        oob=scales::squish
+  )+
+  scale_x_continuous(limits=c(0,1),expand=c(0,0))+
+  scale_y_continuous(limits=c(0,0.02),expand=c(0,0))+
+  labs(y=expression(paste("r  (",m**2~day**-1,")")), 
+       x=expression(paste(L[0]/K,"  (",m**2/m**2,")")), 
+       color="TTR (days)")+
+  theme_linedraw() 
+
+library(patchwork)
+pan_a/(pan_b|pan_c)+plot_annotation(tag_levels = 'a',
+                                    tag_prefix = '(',
+                                    tag_suffix = ')')
+ggsave(pan_a/(pan_b|pan_c)+plot_annotation(tag_levels = 'a',
+                                           tag_prefix = '(',
+                                           tag_suffix = ')'), 
+       filename = 'figures/multipanel_logfitParams_r-ldk_ttr-ldk_logFigDiagram.png', 
+       width=20, 
+       height=20,
+       units='cm',
+       dpi=300)
+
+
+
+
 
 jj[r<0.1][L0<K][(L0/K)<0.5][vc%in%c(2,3,5)][month(date_fire1)%in%c(11,12,1,2,3)][date==(date_fire1+years(1))] %>% 
   ggplot(data=.,aes(map,r,color=vc_name))+

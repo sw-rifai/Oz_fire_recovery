@@ -1,11 +1,14 @@
-library(tidyverse); 
-
+library(tidyverse);
+library(data.table)
+library(lubridate)
 # FASTER Method -----------------------------------------------------------
-out <- arrow::read_parquet("../data_general/proc_data_Oz_fire_recovery/fit_mod-terra-sLAI_ttrDef5_preBS2021-04-26 06:01:53.parquet")
+out <- arrow::read_parquet("../data_general/proc_data_Oz_fire_recovery/fit_mod-terra-sLAI_ttrDef5_preBS2021-05-24 16:20:29.parquet")
 d3 <- expand_grid(out, post_days=seq.int(30,3000,by=30)) %>% 
   mutate(hydro_year = year(date_fire1 - months(3))) %>% 
+  mutate(ttr5_lai = ifelse(is.na(ttr5_lai)==T, 5000, ttr5_lai)) %>% 
+  mutate(recovered = ifelse(post_days >= ttr5_lai, 1, 0)) %>% 
   group_by(post_days,hydro_year) %>% 
-  summarize(val = sum(post_days>ttr5_lai,na.rm=TRUE)/n()) %>% 
+  summarize(val = sum(recovered,na.rm=TRUE)/n()) %>% 
   ungroup()
 
 d3 %>% write_parquet(.,

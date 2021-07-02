@@ -4682,10 +4682,11 @@ ggplot()+
 
 
 apply(dkm, 2,function(x) sum(is.na(x)))
-dkm_s <- apply(dkm[,.(elev,slope,hnd,aspect, 
+dkm_s <- apply(dkm[,.(elev,slope,hnd, 
        map,mapet,matmax,matmin,mavpd15)], 2, scale)
 
 km5 <- kmeans(dkm_s, 4)
+km5$centers
 dkm[,cluster:=km5$cluster] %>% 
   as_tibble() %>% 
   ggplot(data=.,aes(x,y,color=factor(cluster)))+
@@ -4724,3 +4725,370 @@ dkm[,cluster:=km5$cluster] %>%
   geom_point()+
   coord_sf()+
   scale_color_viridis_d(option='H')
+
+library(mgcv)
+tmp <- bam(r~te(aspect,malai)+s(I(L0/K)), 
+    data=fits, 
+    discrete=T, 
+    select=T)
+summary(tmp)
+plot(tmp,scale=0,scheme = 2)
+
+
+
+?MASS::lda
+
+
+tmp <- dkm[species%in%vec20$dom_sp][,speciesf:=factor(species)][,species_idx:=as.numeric(speciesf)]
+
+f1 <- gam(list(species_idx~s(mappet)+s(hnd), 
+               ~s(mappet)+s(hnd)), 
+    data=tmp[species_idx %in% c(1,2)], 
+    family=multinom(K=2), 
+    # discrete=T,
+    select=T)
+
+library(ranger)
+f1 <- ranger(speciesf~elev+aspect+slope+hnd+map+mapet+mappet+matmax+matmin+mavpd15,
+       data=dkm[species%in%vec20$dom_sp][,speciesf:=factor(species)], 
+       importance = 'permutation')
+as_tibble(names=names(f1$variable.importance), 
+          vi=f1$variable.importance %>% as.numeric)
+table(tmp$speciesf, predict(f1, data=tmp)$predictions)
+
+
+barplot(f1$variable.importance)
+
+
+lda <- MASS::lda
+l1 <- lda(speciesf~elev+slope+hnd+map+mapet, 
+    data=dkm[species%in%vec20$dom_sp][,speciesf:=factor(species)], 
+    method='t')
+l1
+
+
+dkm_s <- apply(dkm[,.(elev,slope,hnd, 
+                      map,mapet,matmax,matmin,mavpd15)], 2, scale)
+cbind(dkm[,.(speciesf)],dkm_s)
+
+tmp <- dkm[species%in%vec20$dom_sp][,speciesf:=factor(species)]
+tmp_covars <- apply(tmp[,.(elev,slope,hnd,map,mapet,mappet,matmax,matmin,mavpd15)], 
+                    2, scale)
+tmp <- cbind(tmp[,.(speciesf)],tmp_covars)
+
+l1 <- lda(speciesf~elev+slope+hnd+
+            map+mapet+mappet+matmax+matmin+mavpd15, 
+          data=tmp, 
+          method='t')
+l1$svd
+l1
+
+
+b1 <- bam(r~s(I(L0/K))+
+            dom_sp_f, 
+          data=out_mq[month %in% c(9,10,11,12,1,2)][dom_sp%in%vec20$dom_sp][,dom_sp_f:=factor(dom_sp)], 
+          select=TRUE, 
+          discrete=TRUE)
+summary(b1)
+plot(b1)
+
+library(mgcViz)
+getViz(b1) %>% plot(allTerms=TRUE)
+
+
+
+t1 <- bam(ttr5_lai ~ 
+            s(min_nbr_anom,k=3,bs='cs')+
+            fire_month_f + 
+            s(malai, k=5,bs='cs')+
+            # s(map, k=5,bs='cs')+
+            # s(mapet, k=5,bs='cs')+
+            s(mavpd15,k=5,bs='cs')+
+            s(I(matmax-matmin),k=5,bs='cs')+
+            log(des)+
+            s(pH,k=5,bs='cs')+
+            vpd15_anom_3mo+
+            precip_anom_frac + 
+            post_precip_anom_frac + 
+            vc_name_f, 
+          family=Gamma(link='identity'),
+          data=dat[sample(.N,50000)],
+          discrete=TRUE, 
+          select=TRUE)
+
+
+
+
+################################################################################
+# Random forest attempt --------
+#### 
+rf_defaults <- rand_forest(mode='regression')
+d_split <- initial_split(dat[
+  ,.(ttr5_lai, 
+     # year,
+     fire_month_f, 
+     vc_name_f, 
+     min_nbr_anom, 
+     malai, 
+     map,
+     mapet,
+     mavpd15, 
+     matmax, 
+     matmin, 
+     des,
+     der,
+     pH, 
+     silt,
+     sand,
+     clay,
+     elevation,
+     slope,
+     aspect,
+     pre_fire_slai_anom_12mo,
+     vpd15_anom_3mo,
+     precip_anom_12mo,
+     post_precip_anom_12mo,
+     post_vpd15_anom_12mo,
+     post_tmax_anom_12mo)
+     ][is.na(ttr5_lai)==F] %>% 
+    .[is.na(pre_fire_slai_anom_12mo)==F & is.na(des)==F & is.na(der)==F] %>% 
+    .[sample(.N,5000)], strata = ttr5_lai)
+d_train <- training(d_split)
+d_test <- testing(d_split)
+
+rf_xy_fit <- rand_forest(mode = "regression", mtry = 3, trees = 1000) %>%
+  set_engine("ranger") %>%
+  fit(
+    ttr5_lai ~ .,
+    data = d_train
+  )
+
+
+test_results <- 
+  d_test %>%
+  bind_cols(
+    predict(rf_xy_fit, new_data = d_test)
+  )
+
+norm_recipe <- 
+  recipe(
+    ttr5_lai ~ ., 
+    data = d_train
+  ) %>%
+  # step_other(Neighborhood) %>% 
+  step_dummy(all_nominal()) %>%
+  step_center(all_predictors()) %>%
+  step_scale(all_predictors()) %>%
+  # estimate the means and standard deviations
+  prep(training = d_train, retain = TRUE)
+
+# Now let's fit the model using the processed version of the data
+
+glmn_fit <- 
+  linear_reg(penalty = 0.001, mixture = 0.5) %>% 
+  set_engine("glmnet") %>%
+  fit(ttr5_lai ~ ., data = bake(norm_recipe, new_data = NULL))
+glmn_fit
+
+
+# First, get the processed version of the test set predictors:
+test_normalized <- bake(norm_recipe, new_data = d_test, all_predictors())
+
+test_results <- 
+  test_results %>% as_tibble() %>% 
+  rename(`random forest` = .pred) %>%
+  bind_cols(
+    predict(glmn_fit, new_data = test_normalized) %>%
+      rename(glmnet = .pred)
+  )
+
+
+test_results %>% metrics(truth = ttr5_lai, estimate = glmnet) 
+test_results %>% metrics(truth = ttr5_lai, estimate = `random forest`) 
+
+test_results %>% 
+  select(`random forest`,glmnet,ttr5_lai) %>% 
+  gather(model, prediction, -ttr5_lai) %>% 
+  ggplot(aes(x = prediction, y = ttr5_lai)) + 
+  geom_point(alpha = .4) + 
+  geom_abline(col = "green", lty = 2) + 
+  facet_wrap(~model) + 
+  coord_fixed()
+###########################################################3
+# END RF attempt 
+################
+
+
+
+################################################################################
+# Grid tuning Random forest attempt --------
+#### 
+rf_defaults <- rand_forest(mode='regression')
+d_split <- initial_split(dat[
+  ,.(ttr5_lai, 
+     # year,
+     fire_month_f, 
+     vc_name_f, 
+     min_nbr_anom, 
+     malai, 
+     map,
+     mapet,
+     mavpd15, 
+     matmax, 
+     matmin, 
+     des,
+     der,
+     pH, 
+     silt,
+     sand,
+     clay,
+     elevation,
+     slope,
+     aspect,
+     # pre_fire_slai_anom_12mo,
+     vpd15_anom_3mo,
+     precip_anom_12mo,
+     post_precip_anom_12mo,
+     post_vpd15_anom_12mo,
+     post_tmax_anom_12mo)
+][is.na(ttr5_lai)==F] %>% 
+  .[is.na(pre_fire_slai_anom_12mo)==F & is.na(des)==F & is.na(der)==F & 
+      is.na(slope)==F & is.na(aspect)==F] %>% 
+  .[sample(.N,5000)], strata = ttr5_lai)
+d_train <- training(d_split)
+d_test <- testing(d_split)
+
+rf_mod <- rand_forest(mode = "regression",
+                      mtry = tune(),
+                      trees = tune(),
+                      min_n = tune()) %>% 
+  set_engine("ranger")
+d_rec <- recipe(ttr5_lai~., data=d_train)
+
+d_rs <- bootstraps(d_train, times=5)
+rmse_vals <- metric_set(rmse)
+ctrl <- control_grid(verbose = FALSE, save_pred = TRUE)
+
+formula_res <-
+  rf_mod %>% 
+  # update(mtry = mtry(c,1,10)) %>% 
+  tune_grid(
+    ttr5_lai ~ .,
+    resamples = d_rs,
+    metrics = rmse_vals,
+    control = ctrl
+  )
+formula_res
+
+formula_res %>% 
+  select(.metrics) %>% 
+  slice(1) %>% 
+  pull(1)
+
+
+
+
+xgboost_tuned <- tune::tune_grid(
+  object = xgboost_wf,
+  resamples = ames_cv_folds,
+  grid = xgboost_grid,
+  metrics = yardstick::metric_set(rmse, rsq, mae),
+  control = tune::control_grid(verbose = TRUE)
+)
+
+
+
+
+dat %>% 
+  sample_n(1000) %>% 
+  ggplot(data=.,aes(ttr5_lai))+
+  geom_histogram(bins=10)+
+  facet_wrap(~class)
+
+
+
+
+
+
+
+
+
+
+post_clim[date==ymd("2019-12-01")] %>% 
+  ggplot(data=.,aes(x,y,fill=100*post_precip_anom_12mo/map))+
+  geom_tile()+
+  scale_fill_gradient2()+
+  coord_equal()
+
+
+
+d_min_nbr[min_nbr_anom < -0.05] %>% 
+  # sample_n(500) %>% 
+  # as_tibble() %>% 
+  ggplot(data=.,aes(min_nbr_anom, ldk))+
+  ggpointdensity::geom_pointdensity()+
+  scale_color_viridis_c(option='H')+
+  geom_smooth()
+
+
+
+dat %>% 
+  group_by(year) %>% 
+  summarize(nobs = sum(is.na(ttr5_lai)==T)) %>% 
+  ungroup() %>% 
+  as_tibble() %>% 
+  ggplot(data=.,aes(year, nobs))+
+  geom_point()+
+  geom_vline(aes(xintercept=lubridate::decimal_date(Sys.Date()-lubridate::years(4))))
+
+
+dat[vc %in% c(2,3,5)][month %in% c(9,10,11,12,1,2)]$date_fire1 %>% max
+dat[date_fire1>("2015-01-01")]$month
+
+
+
+dttr <- read_parquet("../data_general/proc_data_Oz_fire_recovery/fit_mod-terra-sLAI_ttrDef5_preBS2021-04-25 15:52:43.parquet")
+dttr$year %>% table
+
+
+
+dat$year %>% table
+dat
+
+out$year %>% table
+
+library(mgcv)
+d <- out %>% as_tibble() %>% filter(is.na(ttr5_lai)==F)
+b1 <- bam(ttr5_lai ~ s(min_nbr_anom)+s(pre_fire_slai_anom_12mo)+s(malai), 
+          family=Gamma(link='identity'), 
+          data=out, 
+          discrete=TRUE, 
+          select=TRUE)
+
+d %>% 
+  as_tibble() %>% 
+  mutate(pred1 = predict(b1, type='response', newdata=.)) %>% 
+  mutate(res = ttr5_lai - pred1) %>% 
+  lm(res ~ ttr5_lai+I(ttr5_lai**2), data=.) -> bc1
+
+bc1
+predict(bc1, newdata = tibble(ttr5_lai=2000))
+
+d %>% as_tibble() %>% 
+  sample_n(1000) %>% 
+  mutate(pred1 = predict(b1, type='response', newdata=.)) %>% 
+  mutate(pred2 = -638 + 0.6185*pred1 + 8.101e-5*pred1**2 + pred1) %>% 
+  ggplot(data=.,aes(ttr5_lai, ttr5_lai - pred1))+
+  geom_smooth()+
+  geom_smooth(inherit.aes = F, aes(ttr5_lai, ttr5_lai - pred2), col='red')
+
+dttr$date_fire1 %>% max
+dttr$date_fire1 %>% decimal_date() %>% hist
+d_fit$date_fire1 %>% decimal_date() %>% hist
+
+post_clim$date %>% decimal_date() %>% hist
+
+dat$date_fire1 %>% decimal_date() %>% hist
+
+grid <- arrow::read_parquet("../data_general/proc_data_Oz_fire_recovery/")
+

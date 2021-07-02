@@ -32,8 +32,16 @@ smooth_lai <- function(din,vi='lai'){
   return(din)
 }
 
+gapfill_lai <- function(din,vi='lai'){
+  din <- din[order(date)]
+  x1 <- data.table::nafill(din[[vi]],type = 'locf')
+  din$slai <- x1
+  return(din)
+}
+
 # STAGE 7: Apply smoothing function -------------------------------------------
-system.time(dat <- dat[,smooth_lai(.SD), by=.(x,y,id)]) # ~5 mins
+# system.time(dat <- dat[,smooth_lai(.SD), by=.(x,y,id)]) # ~5 mins
+system.time(dat <- dat[,gapfill_lai(.SD), by=.(x,y,id)]) # ~5 mins
 gc(full=TRUE)
 
 
@@ -130,7 +138,7 @@ dat1 <- dat1 %>% lazy_dt() %>%
 gc(full=TRUE)
 d_min_nbr <- dat1 %>% 
   lazy_dt() %>% 
-  mutate(nbr_anom = nbr - nbr_u) %>% 
+  # mutate(nbr_anom = nbr - nbr_u) %>% 
   filter(days_since_fire <= 100) %>% 
   filter(is.na(nbr_anom)==FALSE) %>% 
   group_by(id) %>% 
@@ -172,12 +180,76 @@ system.time(
 )
 out <- out %>% lazy_dt() %>% rename(ttr5_lai=ttr5) %>% as.data.table()
 arrow::write_parquet(out[date==date_fire1], 
-      sink = paste0("../data_general/proc_data_Oz_fire_recovery/fit_mod-terra-sLAI_ttrDef5_preBS",Sys.time(),".parquet"))
+      sink = paste0("../data_general/proc_data_Oz_fire_recovery/fit_mod-terra-sLAI_ttrDef5_preBS_",Sys.time(),".parquet"))
 
 # cleanup 
 rm(out); gc(full=TRUE)
 
 
+# dat2: Black Summer fires ---------------------------------------
+dat2 <- dat[id%in%id_test$id][date >= ymd("2019-08-01")]
+gc(full=TRUE)
+firedate_bs <- dat2 %>% lazy_dt() %>%
+  filter(fire_doy > 0) %>%
+  group_by(id) %>%
+  mutate(date_fire1 = date) %>%
+  ungroup() %>%
+  select(id,date_fire1) %>%
+  as.data.table()
+gc(full=TRUE)
+dat2 <- left_join(dat2,firedate_bs,by='id') %>% as.data.table()
+gc(full=TRUE)
+dat2 <- dat2 %>% lazy_dt() %>%
+  mutate(days_since_fire = as.double(date - date_fire1)) %>%
+  as.data.table()
+gc(full=TRUE)
+d_min_nbr <- dat2 %>% 
+  lazy_dt() %>% 
+  # mutate(nbr_anom = nbr - nbr_u) %>% 
+  filter(days_since_fire <= 100) %>% 
+  filter(is.na(nbr_anom)==FALSE) %>% 
+  group_by(id) %>% 
+  summarize(min_nbr_anom = min(nbr_anom,na.rm=TRUE)) %>% 
+  ungroup() %>% 
+  as.data.table()
+gc(full=TRUE)
+dat2 <- merge(dat2,d_min_nbr,by='id')
+gc(full=TRUE)
+
+
+gc(full=TRUE,reset = TRUE)
+
+fn_min <- function(x){ 
+  suppressWarnings({
+    out <- min(x,na.rm=TRUE)
+    if(is.infinite(out)==TRUE){out <- NA_real_}
+  })
+  return(out)}
+
+fn_ttr5 <- function(din){
+  ttr <- din[days_since_fire>=365][slai_anom_12mo>= -0.25*lai_yr_sd]$days_since_fire
+  ttr <- fn_min(ttr)
+  din$ttr5 <- ttr
+  din$pre_fire_slai_anom_3mo <- din[date == floor_date(date_fire1-1,'month')]$slai_anom_3mo[1]
+  din$pre_fire_slai_anom_12mo <- din[date == floor_date(date_fire1-1,'month')]$slai_anom_12mo[1]
+  # din$pre_fire_slai_anom_24mo <- din[date == floor_date(date_fire1-1,'month')]$slai_anom_24mo[1]
+  # din$pre_fire_slai_anom_36mo <- din[date == floor_date(date_fire1-1,'month')]$slai_anom_36mo[1]
+  din <- din[is.na(fire_doy)==FALSE]
+  return(din)
+}
+grpn <- uniqueN(id_test$id)
+system.time(
+  out <- dat2[,
+              {cat("progress",.GRP/grpn*100,"%\n"); 
+                fn_ttr5(.SD)}, 
+              by=.(id,x,y)]
+)
+out <- out %>% lazy_dt() %>% rename(ttr5_lai=ttr5) %>% as.data.table()
+arrow::write_parquet(out[date==date_fire1], 
+                     sink = paste0("../data_general/proc_data_Oz_fire_recovery/fit_mod-terra-sLAI_ttrDef5_BS",Sys.time(),".parquet"))
+
+# cleanup 
+rm(out); gc(full=TRUE)
 
 
 

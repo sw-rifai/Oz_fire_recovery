@@ -19,6 +19,16 @@ fits <- fits[isConv==TRUE][r2>0][L0<K][L0>0][r<0.024][r2>0.5][month%in%c(9,10,11
 # dominant species ---- 
 dom <- read_parquet("../data_general/proc_data_Oz_fire_recovery/ala-mq_1dom-sp_weibull-fit-1burn-locs.parquet")
 dom <- dom[,.(x,y,id,dom_sp)]
+dom20 <- dom[,.(nobs = .N), by='dom_sp'][,rank := frank(-nobs)][order(rank)]
+
+# AusTraits --- 
+at <- fread("../data_general/AusTraits/austraits-2.1.0/data/traits.csv")
+at[dataset_id=="Nicolle_2006"]$trait_name %>% unique
+at[dataset_id=="Nicolle_2006"][trait_name=='fire_response']$value %>% table
+dom20[rank<=20]$dom_sp %in% unique(at[dataset_id=="Nicolle_2006"][trait_name=='fire_response']$taxon_name)
+
+at[dataset_id=="Nicolle_2006"][trait_name=='fire_response']
+
 
 # species bioclim ranges ---
 hab <- read_parquet("../data_general/proc_data_Oz_fire_recovery/ala-mq_species-median-clim-topo.parquet")

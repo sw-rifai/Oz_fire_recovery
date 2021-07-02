@@ -60,7 +60,7 @@ dat <- bind_cols(dat,tmp) %>% as.data.table()
 rm(tmp)
 
 
-# mean annual climate -------------------------
+# pre & post_fire climate -------------------------
 post_clim <- arrow::read_parquet("/home/sami/scratch/awap_clim_se_coastal.parquet", 
                                  col_select = c("x","y","date",
                                                 "precip_anom",
@@ -205,8 +205,8 @@ summary(r1)
 print(plot(getViz(r1),allTerms=TRUE),pages=1)
 gratia::observed_fitted_plot(r1)+
   geom_abline(col='red')
-# plot(r1, scheme=2, pages=1,rug=TRUE, 
-#      all.terms=TRUE)
+plot(r1, scheme=2, pages=1,rug=TRUE,
+     all.terms=F)
 visreg::visreg(r1,xvar = 'mavpd15')
 
 # Predict r: Akin to the growth rate in the linear segment of the logistic function
@@ -286,7 +286,7 @@ fig_k <- pdat %>%
         legend.position = 'none')
 
 fig_r <- pdat %>% 
-  ggplot(data=.,aes(pred_r,r))+
+  ggplot(data=.,aes(exp(pred_r),r))+
   geom_density_2d_filled()+
   scale_fill_viridis_d(option='A')+
   geom_smooth(method='lm', 
@@ -296,10 +296,13 @@ fig_r <- pdat %>%
   scale_y_continuous(expand=c(0,0), limits=c(0,0.01))+
   labs(x=expression(paste("Predicted r ",bgroup("(",frac(m**2,day),")"),"")), 
        y=expression(paste("r ",bgroup("(",frac(m**2,day),")"),"")))+
+  # coord_cartesian(#xlim = c(0,0.02),
+  #                 #ylim=c(0, 0.02)
+  #                 )+
   theme_linedraw()+
   theme(panel.grid = element_blank(), 
         legend.position = 'none')
-
+fig_r
 fig_l0 <- pdat %>% 
   ggplot(data=.,aes(pred_l0,L0))+
   geom_density_2d_filled()+
