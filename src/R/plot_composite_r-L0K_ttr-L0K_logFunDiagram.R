@@ -100,7 +100,7 @@ pan_c <- expand_grid(tibble(K=c(3,3,3),
                         oob=scales::squish
   )+
   scale_x_continuous(limits=c(0,1),expand=c(0,0))+
-  scale_y_continuous(limits=c(0,0.02),expand=c(0,0))+
+  scale_y_continuous(limits=c(0,0.05),expand=c(0,0))+
   labs(y=expression(paste("Growth rate: ",italic(r),"  (m² day¯¹)")), 
        x=expression(paste("Fraction remaining leaf area:"~italic(L[0]/K),"  (",m**2/m**2,")")), 
        color="TTR (years)   ")+
@@ -125,3 +125,50 @@ ggsave(
        units='mm',
        dpi=300)
 
+
+# (fits %>% 
+#   as.data.table() %>% 
+#   .[fire_year>=2001 & fire_year<=2014] %>% 
+#   .[isConv==TRUE] %>% 
+#   .[r<0.05] %>% 
+#   .[r2>0] %>% 
+#   .[L0<K] %>% 
+#   # .[r2>0.75] %>% 
+#   ggplot(data=.,aes(L0/K,r,color=cut_interval(r2,4)))+
+#   geom_point(alpha=0.25,size=0.25)+
+#   geom_smooth(fullrange=F,
+#               # aes(L0/K,r),
+#               # formula=y~s(x,bs='cs',k=5),
+#               # color="#cf0000",
+#               # weight=2.5,
+#               # level=0.999
+#     )+
+#   scale_color_viridis_d(option='H')+
+#   #     scale_color_viridis_c(option='F',
+#   #                       limits=c(365,2000),
+#   #                       direction = 1,
+#   #                       end = 0.85,
+#   #                       breaks=c(365,730,1095,1460,1825),
+#   #                       labels=c("≤ 1","2","3","4","≥5"),
+#   #                       oob=scales::squish
+#   # )+
+#   scale_x_continuous(limits=c(0,1),expand=c(0,0))+
+#   scale_y_continuous(limits=c(0,0.05),expand=c(0,0))+
+#   labs(y=expression(paste("Growth rate: ",italic(r),"  (m² day¯¹)")), 
+#        x=expression(paste("Fraction remaining leaf area:"~italic(L[0]/K),"  (",m**2/m**2,")")), 
+#        color="TTR (years)   ")+
+#   theme_linedraw()+
+#     theme(panel.grid = element_blank(), 
+#       legend.direction = 'horizontal',
+#       legend.position = c(0.5,0.99),
+#       legend.justification = c(0.5,0.99),
+#       legend.background = element_rect(fill=alpha(colour = 'white',alpha=0.85)),
+#       legend.key.height = unit(2,'mm'), 
+#       legend.key.width = unit(13,'mm')))
+# 
+# fits$r2 %>% hist
+# fits$L0 %>% hist
+# fits$K %>% hist
+# fits %>% 
+#   mutate(val = L0/K) %>% 
+#   pull(val) %>% hist

@@ -240,6 +240,7 @@ dim(fdat2)
 # H2O xgboost model fitting ----------------------------------------------------
 library(h2o)
 h2o.init()
+
 Sys.setenv(sys.ai.h2o.auc.maxClasses=81)
 Sys.getenv("sys.ai.h2o.auc.maxClasses")
 
@@ -254,7 +255,7 @@ predictors <- setdiff(colnames(fdat2), response)
 
 # Split the dataset into train and valid
 
-splits <- h2o.splitFrame(data =  hdat, ratios = .75, seed = 1234)
+splits <- h2o.splitFrame(data =  hdat, ratios = .80, seed = 1234)
 train <- splits[[1]]
 valid <- splits[[2]]
 
@@ -265,7 +266,7 @@ a1 <- h2o.automl(x = predictors,
                  training_frame = train, 
                  validation_frame = valid,
                  balance_classes = TRUE,
-                 include_algos = 'XGBoost',
+                 include_algos = c('XGBoost','GBM'),
                  max_models = 30,
                  sort_metric = "mean_per_class_error",
                  # max_runtime_secs = 3600,
@@ -280,6 +281,7 @@ h2o.saveModel(top_mod,
               path=paste0("../data_general/proc_data_Oz_fire_recovery/",
                           "xgboost_euc-sdm-gte80nobs_",Sys.Date(),"_"))
 
+top_mod <- h2o.loadModel("../data_general/proc_data_Oz_fire_recovery/xgboost_euc-sdm-gte80nobs_2021-07-05_/XGBoost_grid__1_AutoML_20210705_104746_model_8")
 top_mod@parameters$ntrees     # 69
 top_mod@parameters$max_depth  # 20
 top_mod@parameters$col_sample_rate #0.8
@@ -294,6 +296,96 @@ h2o.performance(top_mod)@metrics$RMSE
 # MSE 0.21
 # RMSE 0.459
 
+
+
+p1 <- h2o.performance(top_mod, valid)
+p1@metrics$mean_per_class_error
+methods(class=class(p1))
+p1_cm <- p1@metrics$cm$table %>% as.data.table()
+p1_cm[Error==max(Error)]
+
+junk <- p1_cm %>% as.data.table()
+junk[1,1:109] %>% sum
+
+melt(junk[1,1:109] %>% as.matrix())
+
+
+p1 <- h2o.performance(top_mod, valid)
+p1_cm <- p1@metrics$cm$table %>% as.data.table()
+z <- p1_cm[,-c("Error","Rate")] %>% as.matrix()
+z <- z[1:length(colnames(z)),]
+rownames(z) <- colnames(z)
+
+z_norm <- apply(z, 1, FUN=function(x) x/sum(x))
+
+# rc <- rainbow(nrow(z), start = 0, end = .3)
+# cc <- rainbow(ncol(z), start = 0, end = .3)
+# par(mar=c(20,20,20,20))
+# heatmap(z[1:nrow(z)-1,ncol(z):1], 
+#   scale='column', 
+#   margins=c(10,10),
+#   col=viridis::viridis(100),
+#   keep.dendro = F, 
+#   Rowv = NA, 
+#   Colv=NA)
+# legend('topleft',
+#   col=viridis::viridis(100))
+
+
+melt(z_norm) %>% 
+  ggplot(data=.,aes(
+    Var1, #Obs
+    Var2, #Pred
+    fill=value))+
+  geom_tile()+
+  scale_fill_viridis_c(option ='H')+
+  labs(x='Observed',
+    y='Predicted', 
+    fill='Frac.\nPred.',
+    title=p1@metrics$model$name, 
+    subtitle=paste("mean per class error rate: ",format(p1@metrics$mean_per_class_error,digits=3)))+
+  theme(axis.text.x = element_text(angle = 90, size=6), 
+    axis.text.y = element_text(size=6), 
+    title = element_text(size=10))
+ggsave(
+       filename=paste0('figures/euc_sdm_v0.2/XGBoost_grid__1_AutoML_20210705_104746_model_8_confusion_matrix.png'), 
+         width=16*2.5,
+         height=9*2.5,
+         units='cm',
+         dpi=350)
+
+
+
+gc()
+pc <- expand_grid(x=seq(145,154,by=0.01), 
+            y=seq(-40,-27,by=0.01)) %>% 
+  st_as_sf(., coords=c("x","y"), crs=4326)
+tmp <- st_as_stars(clim_wide,dims=c('x','y'))
+st_crs(tmp) <- st_crs(4326)
+vv <- st_extract(tmp, 
+                 at=pc)
+pc <- bind_cols(pc,st_drop_geometry(vv))
+vv <- st_extract(s_soil, 
+                 pc)
+pc <- bind_cols(pc, st_drop_geometry(vv))
+vv <- st_drop_geometry(st_extract(c(rtpi,rdem,rslope,raspect), at=pc))
+pc <- bind_cols(pc,vv)
+vv <- st_drop_geometry(st_extract(c(rhnd), at=pc))
+pc <- bind_cols(pc,vv)
+vv <- st_extract(slai, pc)
+pc <- bind_cols(pc, st_drop_geometry(vv))
+pc <- bind_cols(st_drop_geometry(pc), 
+          st_coordinates(vv) %>% as.data.table() %>% set_names(c("x","y")))
+pc <- na.omit(pc)
+
+
+pc1 <- h2o.predict(top_mod,newdata = as.h2o(pc))
+pc1 <- pc1 %>% as.data.table()
+out <- bind_cols(pc,pc1) %>% as.data.table()
+
+arrow::write_parquet(out, 
+                     sink=paste0("../data_general/proc_data_Oz_fire_recovery/predicted_nobs80-species-distribution-ala-mq_XGBoost_grid__1_AutoML_20210705_104746_model_8_",Sys.time(),".parquet"), 
+  compression='snappy')
 
 
 # 
@@ -354,46 +446,54 @@ xg1 <- h2o.xgboost(x = predictors,
                    y = response,
                    training_frame = train,
                    validation_frame = valid,
-                   seed=1340,
+                   seed=1265,
                    stopping_tolerance = 0.008571778,
+                   booster = 'dart',
                    fold_assignment = 'Modulo',
                    categorical_encoding = "OneHotInternal",
-                   nfolds = 5,
-                   ntrees = 500,
-                   max_depth = 69,
-                   min_rows = 10,
-                   min_child_weight = 10,
-                   col_sample_rate_per_tree = 0.8, 
-                   colsample_bytree = 0.8,
+                   nfolds = 3,
+                   ntrees = 200,
+                   max_depth = 10,
+                   min_rows = 5,
+                   min_child_weight = 5,
+                   col_sample_rate_per_tree = 1, 
+                   colsample_bytree = 0.7,
                    score_tree_interval = 5,
-                   reg_lambda = 10,
-                   reg_alpha = 0.01,
+                   reg_lambda = 1,
+                   reg_alpha = 0.5,
                    dmatrix_type = 'dense',
-                   learn_rate = 0.05,
-                   eta = 0.6,
-                   sample_rate=0.6,
+                   learn_rate = 0.1,
+                   # eta = 0.3,
+                   sample_rate=1,
                    distribution='multinomial',
-                   tree_method='exact',
+                   tree_method='hist',
                    backend='cpu',
                    sample_type = 'uniform',
                    normalize_type = 'tree',
                    max_bins = 256,
                    calibrate_model = F,
                    tweedie_power = 1.5,
-                   keep_cross_validation_predictions = T,
+                   keep_cross_validation_predictions = F,
                    grow_policy = 'depthwise',
                    # booster = "dart",
                    # normalize_type = "tree",
                    # auc_type="MACRO_OVR",
+                   stopping_rounds = 5,
                    stopping_metric = "mean_per_class_error")
+xg1@parameters
+xg1@model_id
+h2o.saveModel(xg1,
+              path=paste0("../data_general/proc_data_Oz_fire_recovery/",
+                          "xgboost_euc-sdm-gte80nobs_",Sys.Date(),"_"))
+
 # 
 # # Error: n-incorrect/n-total
 # # Rate: n-incorrect/n-total
 # # hit ratio: correct/n-total
-p1 <- h2o.performance(xg1,valid)
+p1 <- h2o.performance(xg1, valid)
 methods(class=class(p1))
 p1_cm <- p1@metrics$cm$table %>% as.data.table()
-p1@metrics$mean_per_class_error # 0.5
+p1@metrics$mean_per_class_error # 0.61
 p1@metrics$MSE # 0.5
 p1@metrics$logloss # 2.28
 p1@metrics$r2 # 0.999
@@ -403,6 +503,120 @@ p1@metrics$multinomial_aucpr_table
 h2o.gainsLift(p1)
 ff <- h2o.feature_frequencies(xg1,newdata = valid)
 vip::vip(xg1,30)
+p1
+
+p1_cm <- p1@metrics$cm$table %>% as.data.table()
+z <- p1_cm[,-c("Error","Rate")] %>% as.matrix()
+z <- z[1:length(colnames(z)),]
+rownames(z) <- colnames(z)
+z_norm <- apply(z, 1, FUN=function(x) x/sum(x))
+
+melt(z_norm) %>% 
+  ggplot(data=.,aes(
+    Var1, #Obs
+    Var2, #Pred
+    fill=value))+
+  geom_tile()+
+  scale_fill_viridis_c(option ='H')+
+  labs(x='Observed',
+    y='Predicted', 
+    fill='Frac.\nPred.',
+    title=p1@metrics$model$name, 
+    subtitle=paste("mean per class error rate: ",format(p1@metrics$mean_per_class_error,digits=3)))+
+  theme(axis.text.x = element_text(angle = 90, size=6), 
+    axis.text.y = element_text(size=6), 
+    title = element_text(size=10))
+
+
+
+# xgb grid search ---------------------------------------------------------
+hyperparameters_xgboost <- list(ntrees = c(100,200,400,500),
+                                max_depth = c(4,5,6,7,8,9,10),
+                                learn_rate = c(0.0025, 0.005,0.01,0.02,0.04),
+                                sample_rate = c(1),
+                                col_sample_rate = seq(1), 
+  booster = 'gbtree',
+                   min_rows = 3,
+                   min_child_weight = 3,
+                   col_sample_rate_per_tree = 1, 
+                   colsample_bytree = 0.7,
+                   reg_lambda = 1,
+                   reg_alpha = 0.5,
+                   tree_method='hist'
+)
+hyperparameters_xgboost
+search_criteria <- list(strategy = "RandomDiscrete", 
+                  max_models = 200, 
+                  seed = 1, 
+                   stopping_rounds = 5,
+                   stopping_metric = "mean_per_class_error")
+xg_grid1 <- h2o.grid('xgboost',
+                     y=response,
+                     x=predictors,
+                     training_frame = train,
+                     validation_frame = valid,
+                     seed=3,
+                     hyper_params = hyperparameters_xgboost,
+                     search_criteria = search_criteria)
+
+print(xg_grid1)
+xg_grid1@grid_id
+xg_grid1@summary_table$logloss
+g_perf <- h2o.getGrid(xg_grid1@grid_id,
+            sort_by = "logloss",
+            decreasing = F)
+g_perf@summary_table %>% 
+  select(ntrees,learn_rate,max_depth,logloss) %>% 
+  mutate_all(., as.numeric) %>% 
+  ggplot(data=., aes(ntrees,logloss))+
+  geom_point()+
+  facet_grid(learn_rate~max_depth,scales = 'free')
+
+# 200 trees, depth 6+, learn rate 0.04
+
+print(g_perf)
+best_xg1 <- h2o.getModel(xg_grid1@model_ids[[1]])
+best_xg1@model$cross_validation_predictions
+xg_grid1@model_ids
+h2o.performance(best_xg1)@metrics$logloss
+h2o.performance(best_xg1,newdata = valid)@metrics$mean_per_class_error
+h2o.performance(best_xg1,newdata = valid)@metrics$logloss
+best_xg1@parameters$ntrees
+best_xg1@allparameters$max_depth
+best_xg1@allparameters$learn_rate
+best_xg1@allparameters$nfolds
+best_xg1@allparameters$booster
+
+
+grid <- h2o.grid("xgboost", 
+  x = predictors,
+   y = response,
+                   training_frame = train,
+                   validation_frame = valid,
+                   seed=1265,
+                   stopping_tolerance = 0.008571778,
+                   booster = 'dart',
+                   fold_assignment = 'Modulo',
+                   categorical_encoding = "OneHotInternal",
+                   nfolds = 3,
+  hyper_params = list(ntrees = c(100), 
+    max_depth=c(6,8,10,12,14)), 
+  search_criteria = list(strategy='Cartesian',
+                   max_models=6,
+                   stopping_rounds = 5,
+                   stopping_metric = "mean_per_class_error"))
+# Get grid summary
+summary(grid)
+grid@model_ids
+
+
+# ggsave(
+#        filename=paste0('figures/euc_sdm_v0.2/XGBoost_grid__1_AutoML_20210705_104746_model_8_confusion_matrix.png'), 
+#          width=16*2.5,
+#          height=9*2.5,
+#          units='cm',
+#          dpi=350)
+
 # 
 # 
 # h2o.multinomial_auc_table(xg1)
