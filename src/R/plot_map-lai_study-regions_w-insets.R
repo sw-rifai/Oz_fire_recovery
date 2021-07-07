@@ -6,7 +6,7 @@ library(patchwork)
 
 # Figures -------------------------------------------------------
 oz_poly <- sf::read_sf("../data_general/Oz_misc_data/gadm36_AUS_shp/gadm36_AUS_1.shp") %>% 
-  sf::st_simplify(., dTolerance = 0.025) %>% 
+  sf::st_simplify(., dTolerance = 1000) %>% 
   select(NAME_1)
 
 dat <- arrow::read_parquet("../data_general/proc_data_Oz_fire_recovery/MOD15A2H_smoothed-LAI_500m_SE_coastal_2000-2_2021-4_.parquet")
@@ -116,14 +116,17 @@ p_main <- r_burned %>%
   ggplot(data=.,aes(x,y,fill=nobs))+
   geom_sf(data=oz_poly, inherit.aes = F, 
           fill='gray90',color='gray30')+
+  geom_raster(data=unique(dat[date==ymd("2015-01-01")][,.(x,y)]), 
+    aes(x,y),fill='grey50')+
   geom_tile()+
   coord_sf(xlim = c(144.5,153.75),
            ylim = c(-39.1,-27.25), expand = FALSE)+
-  scale_fill_viridis_c(option='B',
-                       end=0.9,
-                       limits=c(1,3),
-                       breaks=c(1,2,3),
-                       labels=c('1','2','3+'),
+  ggspatial::annotation_scale(location='bl')+
+  scale_fill_gradientn(colors=c("grey50",viridis::inferno(n = 3,end=0.9)),
+                       # end=0.9,
+                       limits=c(0,3),
+                       breaks=c(0,1,2,3),
+                       labels=c('0','1','2','3+'),
                        oob=scales::squish)+
   labs(x=NULL, y=NULL, fill='burns')+
   theme_bw()+
@@ -182,7 +185,7 @@ p_out <- p_main+inset_element(p_ss,
                               right=0.425,
                               top=1 #left bottom right top
                               ) 
-# p_out
+p_out
 ggsave(p_out, filename='map-test.png',dpi=350,height=35,width=30,units='cm')
 ggsave(p_out, 
         filename = "figures/figure_map-n-burns_insets-moogem-act-kilmore.png", 
