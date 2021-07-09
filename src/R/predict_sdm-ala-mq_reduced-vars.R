@@ -589,6 +589,29 @@ melt(z_norm) %>%
     axis.text.y = element_text(size=6), 
     title = element_text(size=10))
 
+ggsave(filename=paste0('figures/euc_sdm_v0.3_2021-07-07/',p1@metrics$model$name,"_confusionMatrix.png"), 
+         width=16*2.5,
+         height=9*2.5,
+         units='cm',
+         dpi=350)
+
+vip::vip(xg1,30)+
+    labs(
+    #   x='Observed',
+    # y='Predicted', 
+    # fill='Frac.\nPred.',
+    title=p1@metrics$model$name)+
+  theme(axis.text.x = element_text(angle = 0, size=9), 
+    axis.text.y = element_text(size=9), 
+    title = element_text(size=10))
+ggsave(filename=paste0('figures/euc_sdm_v0.3_2021-07-07/',p1@metrics$model$name,"_VIP30.png"), 
+         width=16*1.5,
+         height=9*2.5,
+         units='cm',
+         dpi=350)
+
+
+
 gc()
 pc <- expand_grid(x=seq(145,154,by=0.01), 
             y=seq(-40,-27,by=0.01),

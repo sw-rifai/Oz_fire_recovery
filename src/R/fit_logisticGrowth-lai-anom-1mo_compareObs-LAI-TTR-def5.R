@@ -34,7 +34,7 @@ mdat <- ssdat %>%
   as.data.table() 
 mdat[,`:=`(slai_12mo = slai_anom_12mo+malai)]
 mdat[,`:=`(slai_1mo = slai_anom+malai)]
-
+mdat[,`:=`(slai_1mo = ifelse(slai_1mo<0.01,0.01,slai_1mo))]
 rm(dat); gc(full=TRUE)
 
 
@@ -42,10 +42,13 @@ rm(dat); gc(full=TRUE)
 fn_logistic_growth <- function(din){
   start_day <- din[post_days <= 366][slai_1mo == min(slai_1mo)]$post_days[1]
   din <- din[(post_days>=start_day) & (post_days<=(ttr5_lai+365/2 ))]
-  upper_K <- din$malai[1]+3*din$lai_yr_sd[1]
-  lower_K <- din$malai[1]  #-2*din$lai_yr_sd[1]
-  # lower_K <- max(c(0.5,lower_K),na.rm=TRUE)
-  upper_L0 <- din$malai[1]+2*din$lai_yr_sd[1]
+  upper_K <- din$malai[1]+1*din$lai_yr_sd[1]
+  lower_K <- din$malai[1]-1*din$lai_yr_sd[1]
+  lower_K <- max(c(0.4,lower_K),na.rm=TRUE)
+  min_slai_anom <- din[post_days<=366][slai_anom==min(slai_anom,na.rm=T)]$slai_anom
+  date_min_slai_anom <- din[post_days<=366][slai_anom==min(slai_anom,na.rm=T)]$date
+  min_nbr_anom <- din[post_days<=366][nbr_anom==min(nbr_anom,na.rm=T)]$nbr_anom
+  upper_L0 <- din$malai[1]
   lower_L0 <- 0.01
   
   try(fit <- nls_multstart(slai_1mo ~ K/(1 + ((K-L0)/L0)*exp(-r*post_days)), 
@@ -58,7 +61,7 @@ fn_logistic_growth <- function(din){
                            lower= c(K=lower_K, L0=lower_L0, r=0.0001), 
                            upper = c(K=upper_K, 
                                      L0=upper_L0, 
-                                     r=0.05))
+                                     r=0.2))
       ,silent = TRUE)
   if(exists('fit')==FALSE){
     out <- data.table(K=NA_real_,L0=NA_real_,r=NA_real_,isConv=FALSE,start_day=NA_real_,r2=NA_real_,rmse=NA_real_)
@@ -75,6 +78,9 @@ fn_logistic_growth <- function(din){
                                       estimate = predict(fit))
     out$rmse <- yardstick::rmse_vec(truth = din$slai_1mo, 
                                     estimate = predict(fit))
+    out$min_slai_anom <- min_slai_anom
+    out$date_min_slai_anom <- date_min_slai_anom
+    out$min_nbr_anom <- min_nbr_anom
     
   },silent=TRUE)
   out$nobs_til_recovery <- nrow(din)

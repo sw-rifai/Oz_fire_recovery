@@ -33,15 +33,19 @@ ala_mq <- merge(ala_mq[is.na(vc_code)==F], nvis_codes, by='vc_code')
 ala_mq[vc_code %in% c(2,3,4,5,11)]
 unique(ala_mq[,.(vc_name,vc_code)])
 
-tmp_sp_obs <- ala_mq[,species:=str_replace(species," ",".")]
+tmp_sp_obs <- ala_mq[,species:=str_replace(taxon," ",".")]
 
 
-vec_names <- out[,102:210] %>% names
-vec_names
+vec_names <- names(out)[str_which(names(out),"Angophora")[1]:dim(out)[2]]
+
 
 mout <- melt(id.vars=c("x","y"),
-     out[,99:210][,-c("predict")], 
-     variable.name = 'species')
+  out[,c("x","y",eval(vec_names)),with=F],
+  variable.name = 'species')
+
+# mout <- melt(id.vars=c("x","y"),
+#      out[,99:210][,-c("predict")], 
+#      variable.name = 'species')
 
 idx <- seq(1,length(vec_names),by=9)
 i <- 1
@@ -62,7 +66,8 @@ for(i in 1:length(idx)){
      inherit.aes = F, 
      aes(x,y), 
      col='pink',
-     fill='white',
+     shape=21,
+     fill=NA,
      alpha=0.333,
      size=2)+
     scale_fill_stepsn(
@@ -96,31 +101,31 @@ for(i in 1:length(idx)){
 
 
 # SCRATCH **********************************************************************
-# out[,c('x','y',vec_names[i]), with=F] %>% 
-#   ggplot(data=.,aes(x,y,fill= get(vec_names[i]) ))+
-#   geom_sf(data=oz_poly, 
-#           inherit.aes = F, 
-#           fill='grey20',
-#           color='black')+
-#   geom_raster()+
-#   geom_sf(data=oz_poly, 
-#           inherit.aes = F, 
-#           fill=NA,
-#           color='grey80')+
-#   scale_fill_viridis_b(option='F',
-#                        n.breaks=6, 
-#                        limits=c(0,1))+
-#   coord_sf(ylim=c(-38.75,-28), 
-#            xlim=c(145.5,153.5))+
-#   labs(x=NULL, 
-#        y=NULL, 
-#        fill='prob.', 
-#        title=str_replace(eval(vec_names[i]),"\\."," "))+
-#   # guides(fill = guide_colorbar(ncol=1))+
-#   theme(legend.position = c(1,0),
-#         legend.justification = c(1,0),
-#         panel.background = element_rect(fill='lightblue'), 
-#         panel.grid = element_blank())
+out[,c('x','y',vec_names[i]), with=F] %>%
+  ggplot(data=.,aes(x,y,fill= get(vec_names[i]) ))+
+  geom_sf(data=oz_poly,
+          inherit.aes = F,
+          fill='grey20',
+          color='black')+
+  geom_raster()+
+  geom_sf(data=oz_poly,
+          inherit.aes = F,
+          fill=NA,
+          color='grey80')+
+  scale_fill_viridis_b(option='F',
+                       n.breaks=6,
+                       limits=c(0,1))+
+  coord_sf(ylim=c(-38.75,-28),
+           xlim=c(145.5,153.5))+
+  labs(x=NULL,
+       y=NULL,
+       fill='prob.',
+       title=str_replace(eval(vec_names[i]),"\\."," "))+
+  # guides(fill = guide_colorbar(ncol=1))+
+  theme(legend.position = c(1,0),
+        legend.justification = c(1,0),
+        panel.background = element_rect(fill='lightblue'),
+        panel.grid = element_blank())
 # 
 # 
 # 
