@@ -8,7 +8,7 @@ output: html_document
 Notes: set project directory as working directory
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE,cache = TRUE,warning = F,message = F)
+knitr::opts_chunk$set(echo = TRUE,cache = F,warning = F,message = F)
 ```
 ```{r}
 library(tidyverse)

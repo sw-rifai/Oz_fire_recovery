@@ -1,0 +1,290 @@
+---
+title: "GAM of LAI anomalies from bushfires"
+author: "Sami Rifai"
+date: "7/9/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE, warning=FALSE, message=FALSE, eval=TRUE, echo=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+pacman::p_load(tidyverse, data.table, mgcv)
+```
+
+## Load data
+
+```{r}
+fits <- arrow::read_parquet("../data_general/proc_data_Oz_fire_recovery/slai-1mo_logisticGrowthModel_recoveryTrajectoryfits_1burn_2001-2014fires_2021-07-08 16:10:12.parquet")
+```
+
+Making a factor variable from the month of burn. This is important for mgcv where random effects have to be specified as factors.
+
+```{r}
+fits[,fire_month := factor(month(date_fire1))]
+```
+
+## Plot the nonlinear terms
+
+```{r}
+fits[sample(.N,1e5)] %>% 
+  ggplot(data=.,aes(min_nbr_anom, min_slai_anom))+
+  geom_point(size=0.1,
+    alpha=0.1)+
+  geom_smooth() # default gam smooth
+```
+
+```{r}
+fits[sample(.N,1e5)] %>% 
+  ggplot(data=.,aes(malai, min_slai_anom))+
+  geom_point(size=0.1,
+    alpha=0.1)+
+  geom_smooth()
+
+```
+
+## Split data
+
+```{r}
+d_train <- fits[sample(.N,1e5)]
+d_test <- fits[!d_train]
+
+```
+
+## Fit several models of varying complexity
+
+Just focusing on a few terms. min_slai_anom: The minimum LAI anomaly after fire min_nbr_anom: The minimum Normalized Burn Ratio after fire malai: Mean annual LAI fire_month: Month of the fire
+
+First model with the minimum NBR anomaly
+
+```{r}
+b1 <- gam(min_slai_anom ~ min_nbr_anom, 
+  data=d_train)
+summary(b1)
+```
+
+```{r}
+b2 <- gam(min_slai_anom ~ malai,
+  family=gaussian(),
+  data=d_train)
+summary(b2)
+```
+
+```{r}
+b3 <- gam(min_slai_anom ~ s(malai),
+  family=gaussian(),
+  data=d_train)
+plot(b3)
+```
+
+That looks too 'wiggly' to me.
+
+Try again with a shrinkage cubic regression spline.
+
+```{r}
+b4 <- gam(min_slai_anom ~ s(malai, bs='cs'),
+  family=gaussian(),
+  data=d_train, 
+  method='REML') # specify restricted maximum likelihood 
+summary(b4)
+```
+
+```{r}
+plot(b4)
+```
+
+Still looks a bit 'wiggly' aroudn 2.5-3.5 mean annual LAI.
+
+```{r}
+b5 <- gam(min_slai_anom ~ s(malai, bs='cs', k=5),
+  family=gaussian(),
+  data=d_train)
+summary(b5)
+```
+
+```{r}
+plot(b5)
+```
+
+Looks better when the approximated number of knots are specified to \<= 5.
+
+```{r}
+b6 <- gam(min_slai_anom ~ min_nbr_anom,
+  family=gaussian(),
+  data=d_train)
+summary(b6)
+```
+
+```{r}
+# unpenalized
+b7 <- gam(min_slai_anom ~ s(min_nbr_anom),
+  family=gaussian(),
+  data=d_train)
+summary(b7)
+plot(b7) # looks weakly nonlinear
+```
+
+That kink between -0.4 - -0.2 might be real though, but best to try a penalized smooth to see if it's still identified.
+
+Here the `select=TRUE` option penalizes all the smooths. The `bs='cs'` term is a form of penalized spline.
+
+There are many smoothing function options. see: `?smooth.terms`
+
+```{r}
+# penalized smooth
+b8 <- gam(min_slai_anom ~ s(min_nbr_anom, bs='cs'),
+  family=gaussian(),
+  data=d_train, 
+  select=TRUE, 
+  method='REML')
+summary(b8)
+
+```
+
+The edf would be lower if it were more linear, so I suppose it stays as nonlinear.
+
+```{r}
+plot(b8) # 
+```
+
+OK, let's stack the terms.
+
+```{r}
+b9 <- gam(min_slai_anom ~ 
+    s(malai, bs='cs',k=5)+
+    s(min_nbr_anom, bs='cs'),
+  family=gaussian(),
+  data=d_train, 
+  select=TRUE, 
+  method='REML')
+summary(b9)
+
+```
+
+Pretty high rsq, but both terms are indicated as nonlinear (edf \> 1), and important from judging by the F values.
+
+```{r}
+plot(b9) # 
+```
+
+Pretty smooth. I think this makes sense because the NBR anomaly is essentially saturating.
+
+Here we can try a smooth interaction. I'm using a `te` function instead of `s` because the covariates are on different scales. One could use `s` if the covariates were on comparable scales. I think `te` has not been implemented for Stan yet, so `t2` is often used instead - I'm not entirely clear on the differences.
+
+```{r}
+b10 <- gam(min_slai_anom ~
+    te(malai, min_nbr_anom, bs=c("cs","cs"), k=c(5,5)),
+  family=gaussian(),
+  data=d_train, 
+  select=TRUE, 
+  method='REML')
+summary(b10)
+
+```
+
+We can plot a heatmap of the contribution to the linear predictor using `scheme=2`.
+
+```{r}
+plot(b10, scheme=2)
+```
+
+We judge the nonlinear interaction by the the horizontal and vertical gradients.
+
+Try again with a random effect on the time of the burn.
+
+```{r}
+b11 <- gam(min_slai_anom ~
+    te(malai, min_nbr_anom, bs=c("cs","cs"), k=c(5,5)) +
+    s(fire_month, bs='re'),
+  family=gaussian(),
+  data=d_train, 
+  select=TRUE, 
+  method='REML')
+summary(b11)
+
+```
+
+```{r}
+plot(b11, scheme=2, pages=1)
+```
+
+Let's compare with a linear interaction model
+
+```{r}
+b12 <- gam(min_slai_anom ~
+    min_nbr_anom*malai+ 
+    s(fire_month, bs='re'),
+  family=gaussian(),
+  data=d_train, 
+  select=TRUE, 
+  method='REML')
+summary(b12)
+
+```
+
+Cross validate the goodness of fit
+
+```{r}
+yardstick::rsq_trad_vec(truth=d_test$min_slai_anom, 
+  estimate=predict(b11, newdata=d_test, type='response'))
+
+yardstick::rsq_trad_vec(truth=d_test$min_slai_anom, 
+  estimate=predict(b12, newdata=d_test, type='response'))
+```
+
+Pretty good, the R2 estimates from the models were correct.
+
+## Simulating from a fit model
+
+Note that you need to specify any dropped terms as NULL for the mgcv prediction to work. This is not very well documented!
+
+```{r}
+p_dat <- expand_grid(min_nbr_anom = seq(-1,0,length.out=10), 
+            malai = c(0.5,1,2,3,4,5))
+
+p_dat <- p_dat %>% 
+  mutate(fire_month=NULL) %>% 
+  mutate(pred = predict(b11, 
+    newdata=.,
+    newdata.guaranteed = T,
+    type='response', 
+    exclude="s(fire_month)"))
+
+```
+
+```{r}
+p_dat %>% 
+  ggplot(data=., aes(min_nbr_anom, 
+    pred, 
+    color=malai, group=malai))+
+  geom_line()+
+  scale_color_viridis_c()
+```
+
+```{r}
+
+p_dat_linear <- p_dat %>% 
+  select(-pred) %>% 
+  mutate(fire_month=NULL) %>% 
+  mutate(pred = predict(b12, 
+    newdata=.,
+    newdata.guaranteed = T,
+    type='response', 
+    exclude="s(fire_month)"))
+
+p_compare <- bind_rows(p_dat %>% mutate(type='nonlinear'), 
+         p_dat_linear %>% mutate(type='linear'))
+
+```
+
+```{r}
+p_compare %>% 
+  ggplot(data=.,aes(min_nbr_anom, pred, 
+    color=malai,
+    group=paste(malai,type),
+    linetype=type))+
+  geom_line()+
+  scale_color_viridis_c()
+
+```
