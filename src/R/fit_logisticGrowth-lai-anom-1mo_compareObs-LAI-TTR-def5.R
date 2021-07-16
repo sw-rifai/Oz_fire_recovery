@@ -35,11 +35,15 @@ mdat <- ssdat %>%
 mdat[,`:=`(slai_12mo = slai_anom_12mo+malai)]
 mdat[,`:=`(slai_1mo = slai_anom+malai)]
 mdat[,`:=`(slai_1mo = ifelse(slai_1mo<0.01,0.01,slai_1mo))]
+
+mdat[,`:=`(slai_3mo = slai_anom_3mo+malai)]
+mdat[,`:=`(slai_3mo = ifelse(slai_3mo<0.01,0.01,slai_3mo))]
+
 rm(dat); gc(full=TRUE)
 
 
 
-fn_logistic_growth <- function(din){
+fn_logistic_growth_v0 <- function(din){
   start_day <- din[post_days <= 366][slai_1mo == min(slai_1mo)]$post_days[1]
   din <- din[(post_days>=start_day) & (post_days<=(ttr5_lai+365/2 ))]
   upper_K <- din$malai[1]+1*din$lai_yr_sd[1]
@@ -84,6 +88,71 @@ fn_logistic_growth <- function(din){
     
   },silent=TRUE)
   out$nobs_til_recovery <- nrow(din)
+  return(out)
+}
+
+fn_logistic_growth <- function(din){
+  # notes: 
+  # K must be >= malai
+  start_day <- din[post_days <= 366][slai_3mo == min(slai_3mo)]$post_days[1]
+  din <- din[(post_days>=start_day) & (post_days<=(ttr5_lai+365/2 ))]
+  upper_K <- din$malai[1] #+0.25*din$lai_yr_sd[1]
+  lower_K <- din$malai[1] #-0.25*din$lai_yr_sd[1]
+  lower_K <- max(c(0.4,lower_K),na.rm=TRUE)
+  min_slai_anom <- din[post_days<=366][slai_anom==min(slai_anom_3mo,na.rm=T)]$slai_anom_3mo
+  malai <- din$malai[1]
+  lai_yr_sd <- din$lai_yr_sd[1]
+  offset <- abs(min_slai_anom + malai)
+  date_min_slai_anom <- din[post_days<=366][slai_anom==min(slai_anom_3mo,na.rm=T)]$date
+  day_ttr_offset <- as.numeric(date_min_slai_anom - first(din$date_fire1))
+  min_nbr_anom <- din[post_days<=366][nbr_anom==min(nbr_anom,na.rm=T)]$nbr_anom
+  upper_L0 <- din$malai[1]
+  lower_L0 <- 0.01
+  # din[,slai_1mo := slai_1mo+offset+lower_L0]
+  
+  try(fit <- nls_multstart(slai_3mo ~ K/(1 + ((K-L0)/L0)*exp(-r*post_days)), 
+                           data=din,
+                           # iter=1,
+                           iter=20,
+                           supp_errors = 'Y',
+                           start_lower = c(K=0.1*lower_K, L0=0.01, r=0),
+                           start_upper = c(K=0.9*upper_K, L0=0.9*upper_K, r=0.001), 
+                           lower= c(K=lower_K, L0=lower_L0, r=0.0001), 
+                           upper = c(K=upper_K, 
+                                     L0=upper_L0, 
+                                     r=0.333))
+      ,silent = TRUE)
+  
+  try(if(exists('fit')==TRUE & is.null(fit)==TRUE){
+    out <- data.table(K=NA_real_,L0=NA_real_,r=NA_real_,isConv=FALSE,start_day=NA_real_,r2=NA_real_,rmse=NA_real_)
+  }
+  ,silent=TRUE)
+
+    if(exists('fit')==FALSE){
+    out <- data.table(K=NA_real_,
+      L0=NA_real_,
+      r=NA_real_,
+      isConv=FALSE,
+      start_day=NA_real_,
+      r2=NA_real_,
+      rmse=NA_real_)
+    }
+  
+  
+  try(if(exists('fit')==TRUE & is.null(fit)==FALSE){
+    out <- fit %>% coef(.) %>% t() %>% as.data.table()
+    out$isConv <- fit$convInfo$isConv
+    out$start_day <- start_day
+    out$r2 <- yardstick::rsq_trad_vec(truth = din$slai_1mo, 
+                                      estimate = predict(fit))
+    out$rmse <- yardstick::rmse_vec(truth = din$slai_1mo, 
+                                    estimate = predict(fit))
+  },silent=TRUE)
+    out$min_slai_anom <- min_slai_anom
+    out$date_min_slai_anom <- date_min_slai_anom
+    out$min_nbr_anom <- min_nbr_anom
+  out$nobs_til_recovery <- nrow(din)
+  out <- out[,pred_ttr := -log(L0*(-K/(-malai + 0.25*lai_yr_sd) - 1)/(K - L0))/r]
   return(out)
 }
 
@@ -146,9 +215,9 @@ gc(full=T)
 setDT(out4)
 out4[,`:=`(id=as.integer(id))]
 plan(sequential)
-out <- rbindlist(list(out1,out2,out3,out4),use.names = TRUE)
+fits <- rbindlist(list(out1,out2,out3,out4),use.names = TRUE)
 gc(full=T)
-arrow::write_parquet(merge(out, sdat, by=c("id")), 
+arrow::write_parquet(merge(fits, sdat, by=c("id")), 
                      sink=paste0("../data_general/proc_data_Oz_fire_recovery/slai-1mo_logisticGrowthModel_recoveryTrajectoryfits_1burn_2001-2014fires_",Sys.time(),".parquet"))
 # END ****************************************************************
 

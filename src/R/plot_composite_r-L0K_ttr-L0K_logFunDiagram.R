@@ -4,7 +4,9 @@ dat <- arrow::read_parquet("../data_general/proc_data_Oz_fire_recovery/MOD15A2H_
                            col_select = c("x","y","id","date","slai","slai_anom_12mo","malai"))
 dat[,`:=`(slai_12mo = slai_anom_12mo+malai)]
 sdat <- arrow::read_parquet("../data_general/proc_data_Oz_fire_recovery/fit_mod-terra-sLAI_ttrDef5_preBS_2021-06-05 13:01:38.parquet")
-fits <- arrow::read_parquet("../data_general/proc_data_Oz_fire_recovery/slai-1mo_logisticGrowthModel_recoveryTrajectoryfits_1burn_2001-2014fires_2021-06-19 17:33:16.parquet")
+
+# preprocess logistic function fits ------
+fits <- arrow::read_parquet("../data_general/proc_data_Oz_fire_recovery/slai-1mo_logisticGrowthModel_recoveryTrajectoryfits_1burn_2001-2014fires_2021-07-08 21:41:09.parquet")
 fits <- fits[isConv==TRUE][r2>0][,ldk:=L0/K]
 fits[,pred_ttr := -log(L0*(-K/(-malai + 0.25*lai_yr_sd) - 1)/(K - L0))/r]
 fits[,fire_year := lubridate::year(date_fire1 - months(3))]

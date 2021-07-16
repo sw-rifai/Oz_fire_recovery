@@ -24,7 +24,7 @@ nvis_codes <- readr::read_fwf("../data_general/NVIS/nvis51_majorVegClass_codes.t
 
 
 # ALA MQ cleaned --------------
-ala_mq <- fread("../data_general/ALA/Gallagher_cleaned/euc_occurrence_clean.csv") %>% 
+ala_mq <- fread("../data_general/ALA/Gallagher_cleaned/euc_occurrence_clean_v2.csv") %>% 
   rename( 
     x=longitude,
     y=latitude) %>% 
@@ -582,15 +582,22 @@ melt(z_norm) %>%
   scale_y_discrete(limits=rev)+
   labs(x='Observed',
     y='Predicted', 
-    fill='Frac.\nPred.',
+    fill='Frac. Pred.   ',
     title=p1@metrics$model$name, 
     subtitle=paste("mean per class error rate: ",format(p1@metrics$mean_per_class_error,digits=3)))+
   theme(axis.text.x = element_text(angle = 90, size=6), 
-    axis.text.y = element_text(size=6), 
-    title = element_text(size=10))
+    axis.text.y = element_text(size=6),
+    legend.position = c(0.75,0.965),
+    legend.justification = c(0,-0.75),
+    legend.key.height = unit(0.1,'cm'),
+    legend.key.width = unit(0.75,'cm'),
+    legend.direction = 'horizontal',
+    title = element_text(size=10), 
+    plot.margin = margin(20,10,10,10))
 
-ggsave(filename=paste0('figures/euc_sdm_v0.3_2021-07-07/',p1@metrics$model$name,"_confusionMatrix.png"), 
-         width=16*2.5,
+dir.exists(paste0("figures/euc_sdm_v0.3_",Sys.Date()))
+ggsave(filename=paste0('figures/euc_sdm_v0.3_2021-07-14/',p1@metrics$model$name,"_confusionMatrix.png"), 
+         width=16*2.25,
          height=9*2.5,
          units='cm',
          dpi=350)
@@ -603,8 +610,9 @@ vip::vip(xg1,30)+
     title=p1@metrics$model$name)+
   theme(axis.text.x = element_text(angle = 0, size=9), 
     axis.text.y = element_text(size=9), 
-    title = element_text(size=10))
-ggsave(filename=paste0('figures/euc_sdm_v0.3_2021-07-07/',p1@metrics$model$name,"_VIP30.png"), 
+    title = element_text(size=10))+
+  theme_linedraw()
+ggsave(filename=paste0('figures/euc_sdm_v0.3_',Sys.Date(),'/',p1@metrics$model$name,"_VIP30.png"), 
          width=16*1.5,
          height=9*2.5,
          units='cm',
@@ -640,7 +648,7 @@ pc <- bind_cols(st_drop_geometry(pc),
 pc <- na.omit(pc)
 
 # predict !
-pc1 <- h2o.predict(top_mod,newdata = as.h2o(pc))
+pc1 <- h2o.predict(xg1,newdata = as.h2o(pc))
 pc1 <- pc1 %>% as.data.table()
 out <- bind_cols(pc,pc1) %>% as.data.table()
 arrow::write_parquet(out, 
