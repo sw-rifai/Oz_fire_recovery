@@ -100,6 +100,7 @@ fn_logistic_growth <- function(din){
   lower_K <- din$malai[1] #-0.25*din$lai_yr_sd[1]
   lower_K <- max(c(0.4,lower_K),na.rm=TRUE)
   min_slai_anom <- din[post_days<=366][near(slai_anom_3mo,min(slai_anom_3mo,na.rm=T))]$slai_anom_3mo
+  min_slai <- din[post_days<=366][near(slai_anom_3mo,min(slai_anom_3mo,na.rm=T))]$slai_3mo
   malai <- din$malai[1]
   lai_yr_sd <- din$lai_yr_sd[1]
   offset <- abs(min_slai_anom + malai)
@@ -151,6 +152,7 @@ fn_logistic_growth <- function(din){
                                     estimate = predict(fit))
   },silent=TRUE)
     out$min_slai_anom <- min_slai_anom
+    out$min_slai <- min_slai
     out$date_min_slai_anom <- date_min_slai_anom
     out$min_nbr_anom <- min_nbr_anom
   out$nobs_til_recovery <- nrow(din)
