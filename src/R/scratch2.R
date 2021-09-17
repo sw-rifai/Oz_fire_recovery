@@ -235,3 +235,9 @@ merge(fits,sdat,by='id') %>%
   geom_abline(col='red')+
   coord_cartesian(xlim=c(0,3000), 
     ylim=c(0,3000))
+
+
+
+
+out <- arrow::read_parquet("../data_general/proc_data_Oz_fire_recovery/predicted_nobs80-species-distribution-ala-mq_2021-07-14 16:45:26.parquet")
+out[,.(predict)]

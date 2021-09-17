@@ -57,9 +57,13 @@ vv <- st_extract(s_dem,
                  st_as_sf(fits[,.(x,y)],coords=c("x","y"),crs=4326))
 fits <- bind_cols(fits, st_drop_geometry(vv))
 
+rank_species <- fits[r2>0.2][,.(nobs=.N,
+  ldk_range = diff(range(ldk)),
+  n_fy = length(unique(fire_year))),by=species][,rank:=frank(-nobs,ties.method = 'first')][]
 
+rank_species[ldk_range >= 0.7][n_fy >= 3]
 
-d1 <- merge(fits,rank_species,by='species')[r2>0.3][is.na(species)==F][nobs>=30 & ldk_range >= 0.5][,hi_lo := ifelse(L0/K<=0.5,'lo','hi')] %>% 
+d1 <- merge(fits,rank_species,by='species')[r2>0.3][is.na(species)==F][nobs>=50 & ldk_range >= 0.7][n_fy>=3][,hi_lo := ifelse(L0/K<=0.5,'lo','hi')] %>% 
   filter(hi_lo == 'lo') %>% 
   nest(data=-species) %>% 
   mutate(
@@ -67,7 +71,7 @@ d1 <- merge(fits,rank_species,by='species')[r2>0.3][is.na(species)==F][nobs>=30 
     tidied = map(fit, tidy)
   ) %>% 
   unnest(tidied)
-d2 <- merge(fits,rank_species,by='species')[r2>0.3][is.na(species)==F][nobs>=50 & ldk_range >= 0.7][,hi_lo := ifelse(L0/K<=0.5,'lo','hi')] %>% 
+d2 <- merge(fits,rank_species,by='species')[r2>0.3][is.na(species)==F][nobs>=50 & ldk_range >= 0.7][n_fy>=3][,hi_lo := ifelse(L0/K<=0.5,'lo','hi')] %>% 
   filter(hi_lo == 'hi') %>% 
   nest(data=-species) %>% 
   mutate(
@@ -85,7 +89,7 @@ vec_species <- merge(fits,rank_species,by='species')[r2>0.3][is.na(species)==F][
 vec_not_inc <- vec_species[!vec_species %in% vec_inc]
 
 # plot species that increase r with less burn severity 
-p_inc <- merge(fits,rank_species,by='species')[r2>0.3][is.na(species)==F][nobs>=50 & ldk_range >= 0.5][,hi_lo := ifelse(L0/K<=0.5,'lo','hi')] %>% 
+p_inc <- merge(fits,rank_species,by='species')[r2>0.3][is.na(species)==F][nobs>=50 & ldk_range >= 0.7][,hi_lo := ifelse(L0/K<=0.5,'lo','hi')] %>% 
   .[species %in% vec_inc] %>% 
   ggplot(data=.,aes(L0/K, r))+
   ggpointdensity::geom_pointdensity(adjust=0.25)+
@@ -105,7 +109,7 @@ p_inc <- merge(fits,rank_species,by='species')[r2>0.3][is.na(species)==F][nobs>=
   theme(panel.grid = element_blank(),
     legend.position = 'none', 
     strip.background = element_blank(), 
-    strip.text = element_text(color='black',face = 'bold'))
+    strip.text = element_text(color='black',face = 'bold')); p_inc
 scale_fraction <- 0.75
 ggsave(p_inc, filename = 'figures/r_increase-with-L0dK.png', 
   height=60*scale_fraction, 
@@ -113,7 +117,7 @@ ggsave(p_inc, filename = 'figures/r_increase-with-L0dK.png',
   units='cm', dpi=350)
 
 # plot species that don't increase r with less burn severity 
-p_dec <- merge(fits,rank_species,by='species')[r2>0.3][is.na(species)==F][nobs>=50 & ldk_range >= 0.5] %>% 
+p_dec <- merge(fits,rank_species,by='species')[r2>0.3][is.na(species)==F][nobs>=50 & ldk_range >= 0.7] %>% 
   .[species %in% vec_not_inc] %>% 
   ggplot(data=.,aes(L0/K, r))+
   ggpointdensity::geom_pointdensity(adjust=0.25)+
@@ -140,6 +144,10 @@ ggsave(p_dec, filename = 'figures/r_no-increase-with-L0dK.png',
   units='cm', dpi=350)
 
 
+fits[species=="Eucalyptus delegatensis"][r2>0.3] %>%
+  ggplot(data=.,aes(L0/K,r))+
+  geom_point(alpha=0.1)+
+  geom_smooth()
 # 
 # # Plot boxplot TTR by most probably species ------------------------------------
 # rank_nobs <- fits[is.na(species)==F][,.(nobs=.N),by=species][,nob_rank:=frank(-nobs)]

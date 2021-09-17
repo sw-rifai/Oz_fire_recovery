@@ -5,26 +5,31 @@ library(sf); library(stars)
 library(furrr)
 library(arrow)
 library(mgcv)
+library(mgcViz)
 
-oz_poly <- sf::read_sf("../data_general/Oz_misc_data/gadm36_AUS_shp/gadm36_AUS_1.shp") %>% 
-  sf::st_simplify(., dTolerance = 0.1) %>% 
-  select(NAME_1)
+# oz_poly <- sf::read_sf("../data_general/Oz_misc_data/gadm36_AUS_shp/gadm36_AUS_1.shp") %>% 
+#   sf::st_simplify(., dTolerance = 0.1) %>% 
+#   select(NAME_1)
 
 # fits --- 
-fits <- read_parquet("../data_general/proc_data_Oz_fire_recovery/slai12mo_logisticGrowthModel_recoveryTrajectoryfits_1burn_2001-2014fires_2021-05-19 18:18:29.parquet")
-fits <- fits[isConv==TRUE][r2>0][L0<K][L0>0][r<0.024][r2>0.5][month%in%c(9,10,11,12,1,2)][
+fits <- read_parquet("../data_general/proc_data_Oz_fire_recovery/slai-3mo_logisticGrowthModel_recoveryTrajectoryfits_1burn_2001-2014fires_2021-07-16 09:31:56.parquet")
+fits <- fits[isConv==TRUE][r2>0.3][L0<K][L0>0][month%in%c(9,10,11,12,1,2)][
   ,ldk:=(L0/K)
-][ldk<=0.75]
+]
 
-dttr <- read_parquet("../data_general/proc_data_Oz_fire_recovery/fit_mod-terra-sLAI_ttrDef5_preBS2021-04-26 06:01:53.parquet")
+dttr <- read_parquet("../data_general/proc_data_Oz_fire_recovery/fit_mod-terra-sLAI_ttrDef5_preBS_2021-06-05 13:01:38.parquet")
 
 # dominant species ---- 
-dom <- read_parquet("../data_general/proc_data_Oz_fire_recovery/ala-mq_1dom-sp_weibull-fit-1burn-locs.parquet")
-dom <- dom[,.(x,y,id,dom_sp)]
+out <- read_parquet("../data_general/proc_data_Oz_fire_recovery/predicted_nobs80-species-distribution-ala-mq_2021-07-14 16:45:26.parquet")
+sout <- set_names(st_as_stars(out[,.(x,y,predict)], dims = c("x","y"),crs=4326),c("species"))
+st_crs(sout) <- st_crs(4326)
+vv <- st_extract(sout,
+  st_as_sf(fits[,.(x,y)],coords=c("x","y"),crs=4326))
+fits <- bind_cols(fits, st_drop_geometry(vv))
 
-# species bioclim ranges ---
-hab <- read_parquet("../data_general/proc_data_Oz_fire_recovery/ala-mq_species-median-clim-topo.parquet")
-names(hab) <- c("species",paste0("hab_",names(hab)[-1]))
+# # species bioclim ranges ---
+# hab <- read_parquet("../data_general/proc_data_Oz_fire_recovery/ala-mq_species-median-clim-topo.parquet")
+# names(hab) <- c("species",paste0("hab_",names(hab)[-1]))
 
 # mean annual climate -------------------------
 clim <- arrow::read_parquet("/home/sami/scratch/awap_clim_se_coastal.parquet", 
@@ -38,8 +43,9 @@ st_crs(rclim) <- st_crs(4326)
 
 
 # merge into dat  ---------------------
-dat <- merge(fits,dom,by=c("id","x","y"))
-dat <- merge(dat, setnames(hab, "species","dom_sp"), by=c("dom_sp"))
+# dat <- merge(fits,dom,by=c("id","x","y"))
+dat <- fits
+# dat <- merge(dat, setnames(hab, "species","dom_sp"), by=c("dom_sp"))
 
 # attach climate to dat ---------------
 coords <- st_as_sf(dat[,.(x,y)],coords=c("x","y"))
@@ -126,17 +132,17 @@ dat[,fire_month:=month(date_fire1)]
 
 # Filter dat to just Eucs in the Oct-Feb burning -------------------
 dat <- dat[vc %in% c(2,3,5)][month %in% c(9,10,11,12,1,2)]
-nobs <- dat[,.(nobs = .N), by=dom_sp][,rank:=frank(-nobs)]
-sp_fac <- 
-  unique(dat[dom_sp %in% nobs[rank <= 30]$dom_sp][,.(dom_sp,hab_hnd)]) %>% 
-  .[order(hab_hnd)] %>% 
-  .[,sp_fac := forcats::fct_inorder(dom_sp)]
+# nobs <- dat[,.(nobs = .N), by=dom_sp][,rank:=frank(-nobs)]
+# sp_fac <- 
+#   unique(dat[dom_sp %in% nobs[rank <= 30]$dom_sp][,.(dom_sp,hab_hnd)]) %>% 
+#   .[order(hab_hnd)] %>% 
+#   .[,sp_fac := forcats::fct_inorder(dom_sp)]
 # Final mutations
 dat[,delta:=K-L0]
 dat[,fire_month_f := lubridate::month(date_fire1,label = TRUE,abbr = TRUE)][
   ,fire_month_f := factor(fire_month_f,
                           levels=c("Sep","Oct","Nov","Dec","Jan","Feb"),
-                          ordered = TRUE)][,dom_sp_f := factor(dom_sp)]
+                          ordered = TRUE)]#[,dom_sp_f := factor(dom_sp)]
 dat[,vc_name_f := factor(vc_name)]
 dat[,r365 := r*365]
 
@@ -175,8 +181,7 @@ plot(l01, scheme=2, all.terms=F, pages=1)
 
 # Predict recovery LAI (k: carrying capacity)
 k1 <- bam(K ~ 
-            lai_yr_sd+
-            malai,
+            s(malai),
           data=dat[sample(.N,50000)], 
           select=TRUE, 
           discrete=TRUE)
@@ -188,16 +193,18 @@ plot(k1, scheme=2, all.terms=TRUE, pages=1)
 r1 <- bam(r ~
             fire_month_f+ 
             log(ldk)+
-            lai_yr_sd+
-            I(matmax-matmin) +
+            # lai_yr_sd+
+            # I(matmax-matmin) +
             malai +
+            # s(mapet, k=5, bs='cs')+
+            s(mappet,k=5,bs='cs')+
             # I(post_tmax_anom_12mo/matmax)+
             # I(post_vpd15_anom_12mo/mavpd15) +
             # post_tmin_anom_12mo+
             post_vpd15_anom_frac + 
             post_precip_anom_frac
           , 
-          data=dat[sample(.N, 50000)], 
+          data=dat, 
           family=Gamma(link='log'),
           select=TRUE, 
           discrete=TRUE)
@@ -212,9 +219,8 @@ visreg::visreg(r1,xvar = 'mavpd15')
 # Predict r: Akin to the growth rate in the linear segment of the logistic function
 r2 <- bam(exp(r)~fire_month_f+ 
           te(ldk,malai,
-             lai_yr_sd,
              post_precip_anom_frac,k=5), 
-          data=dat[sample(.N, 50000)], 
+          data=dat, 
           family=Gamma(link='log'),
           select=TRUE, 
           discrete=TRUE)
@@ -223,7 +229,19 @@ plot(r2, scheme=2, pages=1,rug=TRUE,
      all.terms=TRUE)
 visreg::visreg(r2,xvar = 'mavpd15')
 
-
+r3 <- bam(r ~
+          s(mappet, k=5, bs='cs')+
+          s(post_precip_anom_frac, k=5, bs='cs')+
+          s(ldk, k=5, bs='cs')+
+          fire_month_f +
+          s(species, bs='re')
+          , 
+          data=dat, #[between(post_vpd15_anom_frac,-0.05,0.075)], 
+          family=Gamma(link='log'),
+          select=TRUE, 
+          discrete=TRUE)
+summary(r3)
+print(plot(getViz(r3),allTerms=TRUE),pages=1)
 
 # beta regression approach
 ldk1 <- bam(ldk~
