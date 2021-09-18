@@ -51,23 +51,24 @@ p_i2 <- h2o.varimp(top_mod) %>%
                        "matmax"='Mean Annual Tmax'))+
   labs(y=NULL,
        x='Scaled Variable Importance')+
-  scale_x_continuous(expand=c(0,0))+
+  scale_x_continuous(expand=c(0,0),limits = c(-0.06,1.01))+
   theme_linedraw()+
-  theme(panel.grid.minor = element_blank(), 
+  theme(text = element_text(size=16),
+    panel.grid.minor = element_blank(), 
         panel.grid.major = element_blank(),
         axis.ticks.length.y = unit(0, 'mm'),
         axis.text.y.left = element_text(hjust=0,
-                                        size=12,
+                                        size=14,
                                         colour = 'black',
                                         face='bold',
                             margin = margin(t = 0,
-                                            r = -230,
+                                            r = -250,
                                             b = 0,
                                             l = 0)), 
         plot.margin = margin(l=30,r=10))
 p_i2
 ggsave(p_i2,filename = "figures/vip10_ttr-class_BS-pred.png",
-       width=10, 
+       width=12, 
        height=14,
        units='cm',
        dpi=350)
@@ -163,6 +164,8 @@ p2 <- magick::image_read( "figures/vip10_ttr-class_BS-pred.png")
 
 pout <- image_composite(pbase,image_scale(p1,"x900"),offset="+127+70")
 pout2 <- image_composite(pout, image_scale(p2,"x1200"),offset="+125+970")
+# image_write(image = pout2, 
+#             path = "test.png")
 image_write(image = pout2, 
             path = "figures/map_gbm-pred-black-summer-5-classes-2insets.png")
 
