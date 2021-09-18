@@ -103,13 +103,13 @@ pan_c <- expand_grid(tibble(K=c(3,3,3),
   # .[r2>0.75] %>% 
   ggplot(data=.,aes(L0/K,r,color=pred_ttr))+
   geom_point(alpha=0.25,size=0.25)+
-  geom_smooth(fullrange=T,
+  geom_smooth(fullrange=F,
               aes(L0/K,r),
               formula=y~s(x,bs='cs',k=5),
               color="white",
               weight=5,
               level=0.999)+
-  geom_smooth(fullrange=T,
+  geom_smooth(fullrange=F,
               aes(L0/K,r),
               formula=y~s(x,bs='cs',k=5),
               # color="#cf0000",
@@ -171,6 +171,7 @@ pan_c2 <- expand_grid(L0=seq(0.01*3,0.9*3,length.out=1000),
   scale_color_viridis_c(option='B',direction = -1)+
   # scale_color_brewer(palette='Set1')+
   # scale_color_manual(values=c("#cf0000", "#1505fc", "#05ecfc"))+
+  guides(color=guide_colorbar(title.position = 'top'))+
   theme_linedraw()+
   theme(panel.grid = element_blank(), 
         legend.background = element_rect(fill=NA),
@@ -178,7 +179,7 @@ pan_c2 <- expand_grid(L0=seq(0.01*3,0.9*3,length.out=1000),
         legend.text = element_text(size=12),
         legend.position = c(0.99,0), 
         legend.justification = c(0.99,0), 
-    legend.direction = 'vertical'); pan_c2
+    legend.direction = 'horizontal'); pan_c2
 
 
 

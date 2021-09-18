@@ -98,7 +98,8 @@ clim_species <- fits[,.(map_sp_u = mean(map),
     x=NULL)+
   theme_minimal()+
   theme(panel.grid = element_blank()
-  ,axis.text.x = element_blank()))
+  ,axis.text.x = element_blank(),
+    text = element_text(size=13)))
 
 # Species level cor
 merge(clim_species, fits[,.(val=median(r)),by=species],by='species') %>% 
@@ -107,20 +108,29 @@ merge(clim_species, fits[,.(val=median(r)),by=species],by='species') %>%
 # Pixel level cor
 fits %>% select(mapet, matmax,matmin,mavpd15,mappet,elevation,pred_ttr) %>% cor
 
+str_replace("Eucalyptus cunninghamii",pattern = "Eucalyptus",replacement = "E.")
+
+rank_ttr <- rank_ttr %>% 
+  .[,`:=`(species = str_replace(species,pattern = "Corymbia",replacement = "C."))] %>% 
+  .[,`:=`(species = str_replace(species,pattern = "Eucalyptus",replacement = "E."))] %>% 
+  .[,`:=`(species = str_replace(species,pattern = "Angophora",replacement = "A."))] 
 
 p_right <- fits[is.na(species)==F][pred_ttr>0] %>% 
   merge(., clim_species, by='species') %>% 
+  .[,`:=`(species = str_replace(species,pattern = "Corymbia",replacement = "C."))] %>% 
+  .[,`:=`(species = str_replace(species,pattern = "Eucalyptus",replacement = "E."))] %>% 
+  .[,`:=`(species = str_replace(species,pattern = "Angophora",replacement = "A."))] %>%
   .[species %in% rank_ttr$species[1:55]] %>% 
   ggplot(data=., aes(y=species, 
                      x=pred_ttr, 
                      fill=mapet_sp_u))+
   geom_boxplot(outlier.colour = NA,color='grey60')+
   geom_vline(aes(xintercept=quantile(fits[pred_ttr>0]$pred_ttr,0.1,na.rm=T)), 
-             col="#8C1515",lty=3,lwd=0.5)+
+             col="black",lty=2,lwd=0.5)+
   geom_vline(aes(xintercept=median(fits[pred_ttr>0]$pred_ttr,na.rm=T)), 
-             col="#8C1515",lwd=1)+
+             col="black",lwd=1)+
   geom_vline(aes(xintercept=quantile(fits[pred_ttr>0]$pred_ttr,0.9,na.rm=T)), 
-             col="#8C1515",lty=3,lwd=0.5)+
+             col="black",lty=2,lwd=0.5)+
   scale_y_discrete(#breaks=rank_ttr$species[1:55], 
                    limits=rev(rank_ttr$species[1:55]))+
   # scale_y_discrete(breaks=rank_ttr$species[1:55], 
@@ -131,7 +141,7 @@ p_right <- fits[is.na(species)==F][pred_ttr>0] %>%
                        limits=c(900,1600),
                        oob=scales::squish)+
   scale_x_continuous(breaks=c(0,500,1000,1500,2500))+
-  coord_cartesian(xlim=c(0,2500),
+  coord_cartesian(xlim=c(0,2550),
                   expand=F)+
   labs(x="Time to Recover (days)",
        y=NULL,
@@ -139,24 +149,30 @@ p_right <- fits[is.na(species)==F][pred_ttr>0] %>%
   theme_linedraw()+
   theme(panel.grid = element_blank(), 
         legend.position = 'none',
-        axis.text.y = element_text(color = rev(vs_listed$color[1:55])),
+        axis.text.y = element_text(color = rev(vs_listed$color[1:55]), 
+          size=13),
+            axis.title.x = element_text(size=14),
+        axis.text.x  = element_text(size=13),
         # legend.position = c(0.99,0.1), 
         # legend.justification = c(0.99,0.1),
         legend.background = element_rect(fill="#FFFFFFBB")); p_right
 
 p_left <- fits[is.na(species)==F][pred_ttr>0] %>% 
   merge(., clim_species, by='species') %>% 
+  .[,`:=`(species = str_replace(species,pattern = "Corymbia",replacement = "C."))] %>% 
+  .[,`:=`(species = str_replace(species,pattern = "Eucalyptus",replacement = "E."))] %>% 
+  .[,`:=`(species = str_replace(species,pattern = "Angophora",replacement = "A."))] %>%
   .[species %in% rank_ttr$species[56:109]] %>%
   ggplot(data=., aes(y=species, 
                      x=pred_ttr, 
                      fill=mapet_sp_u))+
   geom_boxplot(outlier.colour = NA,color='grey60')+
   geom_vline(aes(xintercept=quantile(fits[pred_ttr>0]$pred_ttr,0.1,na.rm=T)), 
-             col="#8C1515",lty=3,lwd=0.5)+
+             col="black",lty=2,lwd=0.5)+
   geom_vline(aes(xintercept=median(fits[pred_ttr>0]$pred_ttr,na.rm=T)), 
-             col="#8C1515",lwd=1)+
+             col="black",lwd=1)+
   geom_vline(aes(xintercept=quantile(fits[pred_ttr>0]$pred_ttr,0.9,na.rm=T)), 
-             col="#8C1515",lty=3,lwd=0.5)+
+             col="black",lty=2,lwd=0.5)+
   scale_y_discrete(#breaks=rank_ttr$species[1:55], 
     limits=rev(rank_ttr$species[56:106]))+
   # scale_y_discrete(breaks=rank_ttr$species[1:55], 
@@ -174,7 +190,10 @@ p_left <- fits[is.na(species)==F][pred_ttr>0] %>%
        fill="PET\n(mm yr¯¹)")+
   theme_linedraw()+
   theme(panel.grid = element_blank(), 
-            axis.text.y = element_text(color = rev(vs_listed$color[56:106])),
+            axis.text.y = element_text(color = rev(vs_listed$color[56:106]), 
+              size=13),
+        axis.title.x = element_text(size=14),
+        axis.text.x  = element_text(size=13),
         legend.position = 'none',#c(0.99,0.01), 
         legend.justification = c(0.99,0.01),
         legend.key.height = unit(1,'cm'),
@@ -186,7 +205,7 @@ p_left <- fits[is.na(species)==F][pred_ttr>0] %>%
 
 scale_factor <- 3
 ggsave(
-       filename="figures/boxplot_pred-ttr-logfit_by_most-probable-species.png",
+       filename="figures/boxplot_pred-ttr-logfit_by_most-probable-species_v2.png",
        width=8.1*scale_factor,
        height=9.1*scale_factor,
        units='cm',
