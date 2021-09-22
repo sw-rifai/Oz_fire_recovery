@@ -14,7 +14,7 @@ oz_poly <- sf::read_sf("../data_general/Oz_misc_data/gadm36_AUS_shp/gadm36_AUS_1
 oz_poly <- oz_poly %>% filter(NAME_1 %in% c("Queensland","New South Wales","Australian Capital Territory","Victoria"))
 
 # load fits ----
-fits <- read_parquet("../data_general/proc_data_Oz_fire_recovery/slai-1mo_logisticGrowthModel_recoveryTrajectoryfits_1burn_2001-2014fires_2021-06-19 17:33:16.parquet")
+fits <- read_parquet("../data_general/proc_data_Oz_fire_recovery/slai-3mo_logisticGrowthModel_recoveryTrajectoryfits_1burn_2001-2014fires_2021-07-22 09:37:07.parquet")
 fits <- fits[isConv==TRUE][r2>0][L0<K][L0>=0][r<0.024][r2>0.333][month%in%c(9,10,11,12,1,2)][
   ,ldk:=(L0/K)
  ]
@@ -27,7 +27,8 @@ fits[,pred_ttr := -log(L0*(-K/(-malai + 0.25*lai_yr_sd) - 1)/(K - L0))/r]
 sout_rat <- fread("../data_general/proc_data_Oz_fire_recovery/predicted_species-distribution-ala-mq_top-40-species_LUT.csv")
 sout_rat
 
-out <- read_parquet("../data_general/proc_data_Oz_fire_recovery/predicted_nobs80-species-distribution-ala-mq_2021-06-25 12:26:19.parquet")
+# out <- read_parquet("../data_general/proc_data_Oz_fire_recovery/predicted_nobs80-species-distribution-ala-mq_2021-06-25 12:26:19.parquet")
+out <- read_parquet("../data_general/proc_data_Oz_fire_recovery/predicted_nobs80-species-distribution-ala-mq_2021-07-14 16:45:26.parquet")
 sout <- set_names(st_as_stars(out[,.(x,y,predict)], dims = c("x","y"),crs=4326),c("species"))
 st_crs(sout) <- st_crs(4326)
 vv <- st_extract(sout,
@@ -60,15 +61,15 @@ fits <- bind_cols(fits, st_drop_geometry(vv))
 
 
 # dominant species ---- 
-# dom <- read_parquet("../data_general/proc_data_Oz_fire_recovery/ala-mq_1dom-sp_weibull-fit-1burn-locs.parquet")
-# dom <- dom[,.(x,y,id,dom_sp)]
-# dom_n <- dom[,.(nobs = .N), by='dom_sp'][,rank := frank(-nobs)][order(rank)][rank<=40]
+dom <- read_parquet("../data_general/proc_data_Oz_fire_recovery/ala-mq_1dom-sp_weibull-fit-1burn-locs.parquet")
+dom <- dom[,.(x,y,id,dom_sp)]
+dom_n <- dom[,.(nobs = .N), by='dom_sp'][,rank := frank(-nobs)][order(rank)][rank<=40]
 
 # dominant species clim habitats
-# hab <- read_parquet("../data_general/proc_data_Oz_fire_recovery/ala-mq_species-median-clim-topo.parquet")
-# hab[,dom_sp:=species]
-# 
-# dom_n <- merge(dom_n,hab,by='dom_sp')
+hab <- read_parquet("../data_general/proc_data_Oz_fire_recovery/ala-mq_species-median-clim-topo.parquet")
+hab[,dom_sp:=species]
+
+dom_n <- merge(dom_n,hab,by='dom_sp')
 
 # d13 ---------
 d13 <- fread("../data_general/AusTraits/wcornwell-leaf13C.csv")
@@ -305,12 +306,14 @@ ggplot(data=out, aes(x,y,fill=predict))+
 p1 <- dat %>% ggplot(data=.,aes(fire_response,r))+
   geom_boxplot(outlier.colour = NA)+
     labs(x='Fire Response')+
-    coord_cartesian(ylim=c(0,0.015),expand=c(0,0))
+    coord_cartesian(ylim=c(0,0.015),expand=c(0,0))+
+  theme_linedraw()
 
 p2 <- dat %>% ggplot(data=.,aes(regen_strategy,r))+
   geom_boxplot(outlier.colour = NA)+
   labs(x='Regeneration Strategy')+
-  coord_cartesian(ylim=c(0,0.015),expand=c(0,0))
+  coord_cartesian(ylim=c(0,0.015),expand=c(0,0))+
+  theme_linedraw()
 p1+p2+plot_layout(widths = c(1,2))
 ggsave(p1+p2+plot_layout(widths = c(1,2)), 
        filename = 'figures/boxplot_r_by_fire-response_regen-strategy.png',
