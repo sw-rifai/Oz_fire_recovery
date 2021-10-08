@@ -143,22 +143,22 @@ at_s[taxon_name=="Eucalyptus regnans"][trait_name=='fire_response']
 pals::pal.bands(pals::parula)
 colorspace::hcl_palettes(plot=T)
 fits[r2>0.333][isConv==T] %>% 
-  ggplot(data=.,aes((L0/K),r,color=cut_number(mappet,6)))+
+  ggplot(data=.,aes((L0/K),r,color=cut_width(mappet,width = 0.5)))+
   geom_density_2d_filled(color=NA,
                          aes(contour_var="ndensity"), 
                          bins=15)+
   geom_smooth(se=F,
               formula=y~s(x,bs='cs',k=3))+
-  scale_color_manual(values =rev(pals::parula(6)))+
+  scale_color_manual(values =rev(pals::parula(8)))+
   colorspace::scale_fill_discrete_sequential(palette='Grays')+
   labs(x=expression(paste(L[0]/K~~(m**2/m**2))), 
        y="r (m²/day)", 
        color="P:PET ratio")+
   guides(fill = guide_none())+
-  coord_cartesian(expand=c(0,0),xlim=c(0,1),ylim=c(0,0.015))+
+  coord_cartesian(expand=c(0,0))+
   theme_linedraw()+
   theme(panel.grid.minor = element_blank())
-ggsave(filename='figures/fig-S4_gam-smooth_r-l0K_by-PPET-range.png', 
+ggsave(filename='figures/gam-smooth_r-l0K_by-PPET-range.png', 
        width=15, 
        height=10,
        units='cm', 

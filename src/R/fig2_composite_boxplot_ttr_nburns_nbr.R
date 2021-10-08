@@ -142,12 +142,20 @@ ts_pct_vpd_anom <- ts_pct_vpd_anom[order(date)][,
 # vv[date==min(date)] %>% ggplot(data=.,aes(x,y))+geom_point()
 # END **************************************************************************
 
+# How much canopy carbon was lost?
 LMA <- 114 # g m**-2
 ts_c_loss <- merge(la2[fire_year>= 2001][fire_year<=2019], 
   ts_fs_fires, by='fire_year') %>% 
   .[,`:=`(carbon_loss = -min_slai_anom*tot_fires*(500**2)*LMA*0.5*1e-6)] %>% 
   .[,.(tot_carbon_loss = sum(carbon_loss,na.rm=T)), by=fire_year]
 
+# By what factor did median annual TTR vary by? 
+fits[fire_year>=2001][,.(val = median(pred_ttr)),by=fire_year] %>% 
+  .[,.(val2 = max(val)/min(val))]
+
+# What coef of variation of interannual TTR?
+fits[fire_year>=2001][,.(val = mean(pred_ttr)),by=fire_year] %>% 
+  .[,.(val2 = sd(val)/mean(val))]
 
 # Plotting ----------------------------------------------------------------
 (p1 <- ts_fs_fires %>% 

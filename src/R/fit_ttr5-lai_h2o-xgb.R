@@ -89,6 +89,7 @@ top_mod@parameters$distribution
 top_mod@parameters
 top_mod@allparameters
 h2o.performance(top_mod)@metrics
+h2o.performance(top_mod,newdata = valid)
 
 
 dpreds <- arrow::read_parquet(file='outputs/pred-black-summer-ttr5-lai-ocat_RF_2021-06-14.parquet') %>% as.data.table()

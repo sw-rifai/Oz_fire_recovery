@@ -177,6 +177,7 @@ pan_c2 <- expand_grid(L0=seq(0.01*3,0.9*3,length.out=1000),
         legend.background = element_rect(fill=NA),
         legend.title = element_text(size=12),
         legend.text = element_text(size=12),
+        legend.key.width = unit(1.2,'cm'),
         legend.position = c(0.99,0), 
         legend.justification = c(0.99,0), 
     legend.direction = 'horizontal'); pan_c2

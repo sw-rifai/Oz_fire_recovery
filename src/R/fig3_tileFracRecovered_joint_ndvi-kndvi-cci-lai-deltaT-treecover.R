@@ -1,5 +1,5 @@
-library(data.table); 
 library(tidyverse);
+library(data.table); 
 library(lubridate) # load AFTER data.table
 library(arrow)
 library(stars)
@@ -38,7 +38,8 @@ p_ndvi <- ndvi %>%
   scale_y_continuous(expand=c(0,0), 
                      limits=c(2000.5,2015.5), 
                      breaks=seq(2001,by=2,length.out=8))+
-  labs(x='Days post fire', 
+  labs(#x='Days post fire', 
+       x=NULL,
        y='Fire Year',
        title='Normalized Difference Vegetation Index',
        fill='Fraction Recovered    ')+
@@ -84,8 +85,8 @@ p_cci <- cci %>%
   scale_y_continuous(expand=c(0,0), 
                      limits=c(2000.5,2015.5), 
                      breaks=seq(2002,by=2,length.out=8))+
-  labs(x='Days post fire', 
-       y='Fire Year',
+  labs(x=NULL, #x='Days post fire', 
+       y=NULL, # y='Fire Year',
        title='Chlorphyll Carotenoid Index', 
        fill='Fraction Recovered    ')+
   # guides(fill=ggplot2::guide_colorbar(title.position = 'left',
@@ -129,8 +130,8 @@ p_kndvi <- kndvi %>%
   scale_y_continuous(expand=c(0,0), 
                      limits=c(2000.5,2015.5), 
                      breaks=seq(2001,by=2,length.out=8))+
-  labs(x='Days post fire', 
-       y='Fire Year',
+  labs(x=NULL, #x='Days post fire', 
+       y=NULL, #y='Fire Year',
        title='Kernel Normalized Difference Vegetation Index',
        fill='Fraction Recovered    ')+
   # guides(fill=ggplot2::guide_colorbar(title.position = 'left',
@@ -176,7 +177,7 @@ p_lai <- lai %>%
   scale_y_continuous(expand=c(0,0), 
                      limits=c(2000.5,2015.5), 
                      breaks=seq(2001,by=2,length.out=8))+
-  labs(x='Days post fire', 
+  labs(x=NULL, #x='Days post fire', 
        y='Fire Year',
        title='Leaf Area Index',
        fill='Fraction Recovered    ')+
@@ -396,7 +397,7 @@ p_vpd <- d2 %>%
                      limits=c(2001.25,2015.75), 
                      breaks=seq(2002,by=2,length.out=8))+
   labs(x='Days after July-1 of the Fire Year', 
-       y='Fire Year',
+       y=NULL, #y='Fire Year',
        fill = " 12-month Anomaly (%)   ",
        title='Regional Vapor Pressure Deficit Anomaly'
        # fill=' 12-month VPD Anomaly (%)   '
