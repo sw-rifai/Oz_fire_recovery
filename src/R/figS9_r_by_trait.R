@@ -1,4 +1,4 @@
-pacman::p_load(tidyverse, stars, data.table, lubridate, arrow, patchwork)
+pacman::p_load(tidyverse, stars, data.table, lubridate, arrow, patchwork,mgcv)
 
 # load fits ----
 fits <- read_parquet("../data_general/proc_data_Oz_fire_recovery/slai-3mo_logisticGrowthModel_recoveryTrajectoryfits_1burn_2001-2014fires_2021-07-22 09:37:07.parquet")
@@ -56,6 +56,10 @@ merge(fits,d_fire_response,by='species') %>%
 
 merge(fits,d_fire_response,by='species')$species %>% unique %>% length
 merge(fits,d_fire_response,by='species')[,.(val = sum(fire_response=='fire_killed')),by=species][val > 0]
+
+# How much of the burned region was dominated by 'fire_killed' species
+100*nrow(merge(fits,d_fire_response,by='species')[fire_response=='fire_killed'])/
+nrow(merge(fits,d_fire_response,by='species'))
 
 # How much larger is r for resprouting than fire_killed species? [for main text]
 m_fire_response <- merge(fits,d_fire_response,by='species') %>% 

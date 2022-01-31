@@ -1,4 +1,4 @@
-pacman::p_load(tidyverse, data.table, lubridate, sf,magick)
+pacman::p_load(tidyverse, data.table, lubridate,stars, sf,magick)
 
 # Load data ------------------------------------------------------------------
 oz_poly <- sf::read_sf("../data_general/Oz_misc_data/gadm36_AUS_shp/gadm36_AUS_1.shp") %>% 
@@ -10,6 +10,14 @@ h2o.init()
 top_mod <- h2o.loadModel("../data_general/proc_data_Oz_fire_recovery/xgboost_ttr5-lai-ocat_2021-06-27_/GBM_5_AutoML_20210627_093118")
 
 dpreds <- arrow::read_parquet("../data_general/proc_data_Oz_fire_recovery/predicted_ttr5-lai-5class_gbm_2021-06-27 13:48:15_.parquet")
+# out_raster <- raster::rasterFromXYZ(dpreds[,.(x,y,predict)][,`:=`(predict=as.integer(predict))] %>% 
+#   rename(z=predict) %>% 
+#   as_tibble())
+# raster::crs(out_raster) <- raster::crs("EPSG:4326")
+# raster::writeRaster(out_raster,filename = "outputs/predicted_ttr5-lai-5class_gbm_2021-06-27.tif",overwrite=T,format="GTiff", 
+#   options=c("COMPRESS=ZSTD"))
+# raster::raster("outputs/predicted_ttr5-lai-5class_gbm_2021-06-27.tif") %>% 
+#   raster::plot()
 
 d_rf <- arrow::read_parquet(file = "../data_general/proc_data_Oz_fire_recovery/dfit-data_ttr5-lai-ocat.parquet")
 d_rf <- d_rf %>% filter(date_fire1 <= lubridate::ymd("2017-03-01")) %>% 
