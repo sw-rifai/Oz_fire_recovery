@@ -19,6 +19,12 @@ r_burned <- dat[is.na(fire_doy)==F][,.(x,y,date)] %>%
        nobs = .N), 
     by=.(x,y)]
 
+# pals::parula(n=3)
+# pals::pal.bands(pals::parula(10))
+parula10 <- pals::parula(10)
+col_kilmore <- parula10[3]
+col_act <- parula10[6]
+col_moogem <- parula10[10]
 
 # Prep Kilmore East fire --------------------------------------------------
 kilmore <- stars::read_stars("../data_general/proc_data_Oz_fire_recovery/kilmore_east_LT05_L1TP_092086_20090216_20161029_01_T1.tif")
@@ -34,7 +40,8 @@ p_kilmore <- p_kilmore+
     y=-37.485-0.025    
   ), 
   label.size=NA,
-  color='#c316d9',
+  color = col_kilmore,
+  # color='#c316d9',
   fill='grey10',
   alpha=0.95,
   size=8,
@@ -51,7 +58,7 @@ p_kilmore
 # Prep ACT 2003 fire ------------------------------------------------------
 act <- stars::read_stars("../data_general/proc_data_Oz_fire_recovery/act_LE07_L1TP_090085_20030415_20170125_01_T1.tif")
 p_act <- RStoolbox::ggRGB(as(act,Class = 'Raster'),r = 5, g=4, b=3)
-p_act
+# p_act
 p_act <- p_act+
   labs(x=NULL,y=NULL)+
   geom_label(
@@ -60,8 +67,10 @@ p_act <- p_act+
            x=148.725+0.025,
            y=-35.586 + 0.025),
            label.size=NA,
-           alpha=0.25,
-           color='#12e1fc',
+           alpha=0.75,
+           fill='black',
+           color=col_act,
+           # color='#12e1fc',
            size=8)+
   # annotate(geom='text',
   #          label='ACT',
@@ -88,7 +97,7 @@ p_moogem <- RStoolbox::ggRGB(as(moogem,Class = 'Raster'),
                              # stretch = 'hist',
                              # quantiles=c(0.1,0.9), 
                              limits=c(100,4500))
-p_moogem
+# p_moogem
 p_moogem <- p_moogem+
   labs(x=NULL,y=NULL)+
   geom_label(
@@ -100,7 +109,7 @@ p_moogem <- p_moogem+
          label.size=NA,
          fill='grey10',
          alpha=0.75,
-         color='yellow',
+         color=col_moogem,
          size=8)+
   theme_linedraw()+
   scale_x_continuous(expand=c(0,0),
@@ -124,7 +133,7 @@ p_main <- r_burned %>%
            ylim = c(-39.1,-27.25), expand = FALSE)+
   ggspatial::annotation_scale(location='bl')+
   scale_fill_manual(limits=factor(c(0,1,2,3)),
-                    values=c("grey",viridis::inferno(3,end=0.85)), 
+                    values=c("grey",viridis::rocket(3,end=0.85)), 
                     labels=c('0','1','2','≥3'))+
   # scale_fill_gradientn(colors=c("grey50",viridis::inferno(n = 3,end=0.9)),
   #                      # end=0.9,
@@ -142,42 +151,48 @@ p_main <- r_burned %>%
         legend.position = c(1,0), 
         legend.justification = c(0.99,0.01)); p_main
 
-p_main <- p_main+geom_rect(aes(xmin=st_bbox(kilmore)$xmin, 
-                               xmax=st_bbox(kilmore)$xmax,
-                               ymin=st_bbox(kilmore)$ymin,
-                               ymax=st_bbox(kilmore)$ymax),
-                           fill=NA,lwd=2.1,
-                           col='black')+
+p_main <- p_main+
+  geom_rect(aes(xmin=st_bbox(kilmore)$xmin, 
+                   xmax=st_bbox(kilmore)$xmax,
+                   ymin=st_bbox(kilmore)$ymin,
+                   ymax=st_bbox(kilmore)$ymax),
+               fill=NA,lwd=3.5,
+               col='black')+
   geom_rect(aes(xmin=st_bbox(act)$xmin, 
                 xmax=st_bbox(act)$xmax,
                 ymin=st_bbox(act)$ymin,
                 ymax=st_bbox(act)$ymax),
-            fill=NA,lwd=2.1,
+            fill=NA,lwd=3.5,
             col='black')+
   geom_rect(aes(xmin=st_bbox(moogem)$xmin, 
                 xmax=st_bbox(moogem)$xmax,
                 ymin=st_bbox(moogem)$ymin,
                 ymax=st_bbox(moogem)$ymax),
-            fill=NA,lwd=2.1,
+            fill=NA,lwd=3.5,
             col='black')+
   geom_rect(aes(xmin=st_bbox(kilmore)$xmin, 
                      xmax=st_bbox(kilmore)$xmax,
                      ymin=st_bbox(kilmore)$ymin,
                      ymax=st_bbox(kilmore)$ymax),
-                 fill=NA,lwd=1,
-                 col='#c316d9')+
+                 fill=NA,lwd=2,
+                 # col='#c316d9'
+                 col=col_kilmore,
+    )+
   geom_rect(aes(xmin=st_bbox(act)$xmin, 
                 xmax=st_bbox(act)$xmax,
                 ymin=st_bbox(act)$ymin,
                 ymax=st_bbox(act)$ymax),
-            fill=NA,lwd=1,
-            col='#12e1fc')+
+            fill=NA,lwd=2,
+                     col=col_act,
+            # col='#12e1fc'
+    )+
   geom_rect(aes(xmin=st_bbox(moogem)$xmin, 
                 xmax=st_bbox(moogem)$xmax,
                 ymin=st_bbox(moogem)$ymin,
                 ymax=st_bbox(moogem)$ymax),
-            fill=NA,lwd=1,
-            col='yellow')
+            fill=NA,lwd=2,
+            col=col_moogem
+    )
 
 p_ss <- p_moogem/p_act/p_kilmore
 # p_ss
@@ -189,6 +204,14 @@ p_map <- p_main+inset_element(p_ss,
                               right=0.425,
                               top=1 #left bottom right top
                               ) 
+
+ggsave(p_map, 
+       filename = "figures/p_map.png",
+       height=35, 
+       width=23,
+       units='cm',
+       dpi = 350)
+
 # END map plot *******************************************************
 
 # cleanup --- 
@@ -261,7 +284,7 @@ clim <- merge(clim,coords_awap,by=c('x','y'))
 gc(full=TRUE)
 fits <- merge(fits, coords_vi, by='id')
 gc(full=TRUE)
-#*******************************************************************************
+#*************************************************************************
 
 # ACT quantile plot -------------------------------------------------------
 vec_act <- fits[isConv==TRUE][is.na(r2)==FALSE][L0<K][vc %in% c(2,3,5)][
@@ -553,12 +576,6 @@ p_ts
 
 
 
-ggsave(p_map, 
-       filename = "figures/p_map.png",
-       height=35, 
-       width=23,
-       units='cm',
-       dpi = 350)
 ggsave(p_ts, 
        filename = "figures/p_ts.png",
        height=35, 
@@ -570,5 +587,5 @@ f_1 <- image_read("figures/p_map.png")
 f_1 <- image_annotate(f_1, text="(a)", location = "+10+10",size = 150)
 f_2 <- image_read("figures/p_ts.png")
 f_out <- image_append(c(f_1,f_2), stack=F)
-image_write(f_out, path="figures/figure_combo_map-time-series_moogem-act-kilmoreE_v2.png")
+image_write(f_out, path="figures/figure_combo_map-time-series_moogem-act-kilmoreE_v3.png")
 
