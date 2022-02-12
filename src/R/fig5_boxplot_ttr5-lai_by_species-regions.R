@@ -115,21 +115,21 @@ rank_ttr <- rank_ttr %>%
   .[,`:=`(species = str_replace(species,pattern = "Eucalyptus",replacement = "E."))] %>% 
   .[,`:=`(species = str_replace(species,pattern = "Angophora",replacement = "A."))] 
 
-p_right <- fits[is.na(species)==F][pred_ttr>0] %>% 
+p_right <- fits[is.na(species)==F][ttr5_lai>0] %>% 
   merge(., clim_species, by='species') %>% 
   .[,`:=`(species = str_replace(species,pattern = "Corymbia",replacement = "C."))] %>% 
   .[,`:=`(species = str_replace(species,pattern = "Eucalyptus",replacement = "E."))] %>% 
   .[,`:=`(species = str_replace(species,pattern = "Angophora",replacement = "A."))] %>%
   .[species %in% rank_ttr$species[1:55]] %>% 
   ggplot(data=., aes(y=species, 
-                     x=pred_ttr, 
+                     x=ttr5_lai, 
                      fill=mapet_sp_u))+
   geom_boxplot(outlier.colour = NA,color='grey60')+
-  geom_vline(aes(xintercept=quantile(fits[pred_ttr>0]$pred_ttr,0.1,na.rm=T)), 
+  geom_vline(aes(xintercept=quantile(fits[ttr5_lai>0]$ttr5_lai,0.1,na.rm=T)), 
              col="black",lty=2,lwd=0.5)+
-  geom_vline(aes(xintercept=median(fits[pred_ttr>0]$pred_ttr,na.rm=T)), 
+  geom_vline(aes(xintercept=median(fits[ttr5_lai>0]$ttr5_lai,na.rm=T)), 
              col="black",lwd=1)+
-  geom_vline(aes(xintercept=quantile(fits[pred_ttr>0]$pred_ttr,0.9,na.rm=T)), 
+  geom_vline(aes(xintercept=quantile(fits[ttr5_lai>0]$ttr5_lai,0.9,na.rm=T)), 
              col="black",lty=2,lwd=0.5)+
   scale_y_discrete(#breaks=rank_ttr$species[1:55], 
                    limits=rev(rank_ttr$species[1:55]))+
@@ -140,8 +140,8 @@ p_right <- fits[is.na(species)==F][pred_ttr>0] %>%
                        begin = 0, 
                        limits=c(900,1600),
                        oob=scales::squish)+
-  scale_x_continuous(breaks=c(0,500,1000,1500,2500))+
-  coord_cartesian(xlim=c(0,2550),
+  scale_x_continuous(breaks=c(365,365*2,365*3,365*4,365*5,365*6))+
+  coord_cartesian(xlim=c(365,2650),
                   expand=F)+
   labs(x="Time to Recover (days)",
        y=NULL,
@@ -157,21 +157,21 @@ p_right <- fits[is.na(species)==F][pred_ttr>0] %>%
         # legend.justification = c(0.99,0.1),
         legend.background = element_rect(fill="#FFFFFFBB")); p_right
 
-p_left <- fits[is.na(species)==F][pred_ttr>0] %>% 
+p_left <- fits[is.na(species)==F][ttr5_lai>0] %>% 
   merge(., clim_species, by='species') %>% 
   .[,`:=`(species = str_replace(species,pattern = "Corymbia",replacement = "C."))] %>% 
   .[,`:=`(species = str_replace(species,pattern = "Eucalyptus",replacement = "E."))] %>% 
   .[,`:=`(species = str_replace(species,pattern = "Angophora",replacement = "A."))] %>%
   .[species %in% rank_ttr$species[56:109]] %>%
   ggplot(data=., aes(y=species, 
-                     x=pred_ttr, 
+                     x=ttr5_lai, 
                      fill=mapet_sp_u))+
   geom_boxplot(outlier.colour = NA,color='grey60')+
-  geom_vline(aes(xintercept=quantile(fits[pred_ttr>0]$pred_ttr,0.1,na.rm=T)), 
+  geom_vline(aes(xintercept=quantile(fits[ttr5_lai>0]$ttr5_lai,0.1,na.rm=T)), 
              col="black",lty=2,lwd=0.5)+
-  geom_vline(aes(xintercept=median(fits[pred_ttr>0]$pred_ttr,na.rm=T)), 
+  geom_vline(aes(xintercept=median(fits[ttr5_lai>0]$ttr5_lai,na.rm=T)), 
              col="black",lwd=1)+
-  geom_vline(aes(xintercept=quantile(fits[pred_ttr>0]$pred_ttr,0.9,na.rm=T)), 
+  geom_vline(aes(xintercept=quantile(fits[ttr5_lai>0]$ttr5_lai,0.9,na.rm=T)), 
              col="black",lty=2,lwd=0.5)+
   scale_y_discrete(#breaks=rank_ttr$species[1:55], 
     limits=rev(rank_ttr$species[56:106]))+
@@ -182,8 +182,8 @@ p_left <- fits[is.na(species)==F][pred_ttr>0] %>%
                        begin = 0, 
                        limits=c(900,1600),
                        oob=scales::squish)+
-  scale_x_continuous(breaks=c(0,500,1000,1500,2000))+
-  coord_cartesian(xlim=c(0,2650),
+  scale_x_continuous(breaks=c(365,365*2,365*3,365*4,365*5,365*6))+
+  coord_cartesian(xlim=c(365,2650),
                   expand=F)+
   labs(x="Time to Recover (days)",
        y=NULL,
@@ -205,7 +205,7 @@ p_left <- fits[is.na(species)==F][pred_ttr>0] %>%
 
 scale_factor <- 3
 ggsave(
-       filename="figures/boxplot_pred-ttr-logfit_by_most-probable-species_v2.png",
+       filename="figures/boxplot_ttr5-lai_logfit_by_most-probable-species_v3.png",
        width=8.1*scale_factor,
        height=9.1*scale_factor,
        units='cm',

@@ -149,11 +149,13 @@ dat[,r365 := r*365]
 
 # Predict delta: How much leaf area was lost due to fire
 # delta = K-L0
-delta1 <- bam(delta~
+delta1 <- bam(
+  # delta~
+    I((K-L0)/K) ~ 
                 vc_name+
                 fire_month_f+
                 malai+
-                lai_yr_sd+
+                # lai_yr_sd+
                 te(mavpd15,vpd15_anom_3mo,k=5)+
                 te(map,precip_anom_frac,k=5),
               family=Gamma(link='log'),
@@ -176,7 +178,7 @@ l01 <- bam(L0 ~
               select=TRUE, 
               discrete=TRUE)
 summary(l01)
-plot(l01, scheme=2, all.terms=F, pages=1)
+plot(l01, scheme=2, all.terms=F, pages=1,hcolors=scico::scico(10,palette='roma'))
 
 
 # Predict recovery LAI (k: carrying capacity)

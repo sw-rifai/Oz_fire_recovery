@@ -377,6 +377,36 @@ dp2 %>% select(x,y,predict) %>% rename(p2 = predict) %>% mutate(idx=1:nrow(dp1))
 
 
 
+# Plot marginal responses -------------------------------------------------
+d_rf <- arrow::read_parquet(file = "../data_general/proc_data_Oz_fire_recovery/dfit-data_ttr5-lai-ocat.parquet")
+d_rf <- d_rf %>% filter(date_fire1 <= lubridate::ymd("2017-03-01")) %>% 
+  mutate(fire_year = lubridate::year(date_fire1-months(3))) %>% 
+  mutate(fire_year = factor(fire_year))
+d_rf <- d_rf %>% mutate(ttr_ocat = factor(ttr_ocat,levels = 1:5, labels = 1:5, ordered = F)) 
+d_rf <- d_rf %>% 
+  rename(x=x.x,y=y.x) %>% 
+  # mutate(x = round(x.x*10)/10,
+  # y=round(y.x*10)/10) %>% 
+  as.data.table()
+
+top_mod <- h2o.loadModel("outputs/GBM_bestModNoSpecies_2022-02-08 13:43:04/GBM_model_R_1644351105607_1")
+
+tmp <- bind_cols(h2o.predict(top_mod, as.h2o(d_rf)) %>% as.data.table(),
+                    d_rf)
+dpreds %>%
+  sample_n(10000) %>%
+  select(contains(predictors),predict) %>%
+  pivot_longer(cols = -predict) %>%
+  ggplot(data=.,aes(value,predict))+
+  # geom_point()
+  geom_smooth(method='bam',se=F,
+    formula=y~s(x,bs='cs'),
+    method.args=list(discrete=T))+
+  geom_rug()+
+  facet_wrap(~name,scales='free_x')
+
+
+
 # s1 <- h2o.gbm(x = predictors[!str_detect(predictors,"species")],
 #         y = response,
 #         ntrees = 55,
@@ -551,19 +581,19 @@ dp2 %>% select(x,y,predict) %>% rename(p2 = predict) %>% mutate(idx=1:nrow(dp1))
 #   theme_void()+
 #   theme(panel.background = element_rect(fill='grey'))
 # library(mgcv)
-# dpreds %>% 
-#   sample_n(10000) %>% 
-#   select(contains(predictors),predict) %>% 
-#   pivot_longer(cols = -predict) %>% 
-#   ggplot(data=.,aes(value,predict))+
-#   # geom_point()
-#   geom_smooth(method='bam',se=F, 
-#     formula=y~s(x,bs='cs'),
-#     method.args=list(discrete=T))+
-#   geom_rug()+
-#   facet_wrap(~name,scales='free_x')
-#   # scale_color_viridis_d(option='H')+
-#   # facet_wrap(~cut(min_nbr_anom,c(-Inf,-0.75,-0.5,-0.25,Inf)))
+dpreds %>%
+  sample_n(10000) %>%
+  select(contains(predictors),predict) %>%
+  pivot_longer(cols = -predict) %>%
+  ggplot(data=.,aes(value,predict))+
+  # geom_point()
+  geom_smooth(method='bam',se=F,
+    formula=y~s(x,bs='cs'),
+    method.args=list(discrete=T))+
+  geom_rug()+
+  facet_wrap(~name,scales='free_x')
+  # scale_color_viridis_d(option='H')+
+  # facet_wrap(~cut(min_nbr_anom,c(-Inf,-0.75,-0.5,-0.25,Inf)))
 # predictors
 # dpreds[sample(.N,10000)] %>% 
 #   ggplot(data=.,aes(min_nbr_anom,predict, 

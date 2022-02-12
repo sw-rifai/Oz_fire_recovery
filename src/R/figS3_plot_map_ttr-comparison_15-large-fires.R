@@ -6,10 +6,10 @@ ba <- ba %>% rename(date_fire1 = date)
 ba <- merge(fits, ba, by=c("x","y","date_fire1"))
 ba_rank <- ba[,.(ba_m2 = median(ba_m2)), by=label][,size_rank := frank(-ba_m2,ties.method = 'first')][order(size_rank)]
 ba_rank
-vec_sel <- ba_rank[size_rank<=15]$label
+vec_sel <- ba_rank[size_rank<=10]$label
 
 pan_lf <- merge(ba, ba_rank, by='label') %>% 
-  filter(size_rank <= 15) %>% as.data.table() %>%  
+  filter(size_rank <= 10) %>% as.data.table() %>%  
   ggplot(data=.,aes(x,y,fill=pred_ttr))+
   geom_raster()+
   scale_fill_viridis_c(option='B', limits=c(365,2000), oob=scales::squish, 
@@ -23,10 +23,11 @@ pan_lf <- merge(ba, ba_rank, by='label') %>%
   facet_wrap(~size_rank, scales = 'free',ncol=5,labeller = label_both)+
   theme_linedraw()+
   theme(panel.grid.minor = element_blank(), 
-        panel.background = element_rect(fill='grey90')); pan_lf
+        panel.background = element_rect(fill='grey90'), 
+    aspect.ratio=1); pan_lf
 
 pan_mw <- merge(ba, ba_rank, by='label') %>% 
-  filter(size_rank <= 15) %>% as.data.table() %>% 
+  filter(size_rank <= 10) %>% as.data.table() %>% 
   ggplot(data=.,aes(x,y,fill=ttr5_lai))+
   geom_raster()+
   scale_fill_viridis_c(option='B', limits=c(365,2000), oob=scales::squish, 
@@ -40,7 +41,8 @@ pan_mw <- merge(ba, ba_rank, by='label') %>%
   facet_wrap(~size_rank, scales = 'free',ncol=5,labeller = label_both)+
   theme_linedraw()+
   theme(panel.grid.minor = element_blank(), 
-        panel.background = element_rect(fill='grey90'))
+        panel.background = element_rect(fill='grey90'),
+        aspect.ratio = 1)
 
 pan_mw/pan_lf+plot_annotation(tag_levels = 'a',tag_prefix = '(',tag_suffix = ')')+
   plot_layout(guides = 'collect')&theme(
@@ -48,8 +50,8 @@ pan_mw/pan_lf+plot_annotation(tag_levels = 'a',tag_prefix = '(',tag_suffix = ')'
     legend.key.height = unit(0.2,'cm'),
     legend.key.width = unit(0.6,'cm'))
 scale_factor <- 3
-ggsave(filename = 'figures/map_ttr-comparison_15-large-fires.png', 
-  height=10*scale_factor,
-  width=9*scale_factor,
+ggsave(filename = 'figures/map_ttr-comparison_10-large-fires.png', 
+  height=7.5*scale_factor,
+  width=8*scale_factor,
   units='cm',
   dpi=500)
