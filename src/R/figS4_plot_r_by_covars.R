@@ -22,6 +22,7 @@ fits <- fits[isConv==TRUE][r2>0][L0<K][L0>=0][r<0.024][r2>0.333][month%in%c(9,10
 fits[,pred_ttr := -log(L0*(-K/(-malai + 0.25*lai_yr_sd) - 1)/(K - L0))/r]
 
 
+
 # predicted dominant species ---- 
 # sout <- stars::read_stars("../data_general/proc_data_Oz_fire_recovery/predicted_nobs80-species-distribution-ala-mq_2021-06-25 09:34:41.tiff")
 sout_rat <- fread("../data_general/proc_data_Oz_fire_recovery/predicted_species-distribution-ala-mq_top-40-species_LUT.csv")
@@ -163,6 +164,30 @@ ggsave(filename='figures/gam-smooth_r-l0K_by-PPET-range.png',
        height=10,
        units='cm', 
        dpi=350)
+
+fits[r2>0.333][isConv==T] %>% 
+  ggplot(data=.,aes(1-(L0/K),r,color=cut_width(mappet,width = 0.5)))+
+  geom_density_2d_filled(color=NA,
+                         aes(contour_var="ndensity"), 
+                         bins=15)+
+  geom_smooth(se=F,
+              formula=y~s(x,bs='ad',k=10),
+    method='gam')+
+  scale_color_manual(values =rev(pals::parula(8)))+
+  colorspace::scale_fill_discrete_sequential(palette='Grays')+
+  labs(x=expression(paste("Estimated Burn Severity: ",1-italic(L[0]/K)~~(m**2/m**2))), 
+       y=expression(paste("Post-Fire recovery rate: ",italic(r)~(LAI~day**-1))), 
+       color="P:PET ratio")+
+  guides(fill = guide_none())+
+  coord_cartesian(expand=c(0,0))+
+  theme_linedraw()+
+  theme(panel.grid.minor = element_blank())
+ggsave(filename='figures/fig-S4_gam-smooth_r-burnSeverity_by-PPET-range.png', 
+       width=15, 
+       height=10,
+       units='cm', 
+       dpi=350)
+
 
 # Plot boxplot TTR by most probably species ------------------------------------
 rank_nobs <- fits[is.na(species)==F][,.(nobs=.N),by=species][,nob_rank:=frank(-nobs)]

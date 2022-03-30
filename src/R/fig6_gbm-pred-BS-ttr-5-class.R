@@ -8,11 +8,17 @@ oz_poly <- sf::read_sf("../data_general/Oz_misc_data/gadm36_AUS_shp/gadm36_AUS_1
 library(h2o) 
 h2o.init()
 # top_mod <- h2o.loadModel("../data_general/proc_data_Oz_fire_recovery/xgboost_ttr5-lai-ocat_2021-06-27_/GBM_5_AutoML_20210627_093118")
-top_mod <- h2o.loadModel("outputs/GBM_bestModNoSpecies_2022-02-08 13:43:04/GBM_model_R_1644351105607_1")
+top_mod <- h2o.loadModel("outputs/GBM_bestModNoSpecies_2022-03-11 14:47:20/GBM_model_R_1646970170483_1")
+
 
 dpreds <- arrow::read_parquet(file='outputs/pred-black-summer-ttr5-lai-ocat_RF_2021-06-14.parquet') %>% as.data.table()
 dpreds <- bind_cols(h2o.predict(top_mod, as.h2o(dpreds)) %>% as.data.table(),
                     dpreds)
+
+median(d_rf$ttr5_lai)/365
+median(dpreds$predict)/median(d_rf$ttr5_lai)
+quantile(dpreds$predict,0.25)/quantile(d_rf$ttr5_lai,0.25)
+quantile(dpreds$predict,0.75)/quantile(d_rf$ttr5_lai,0.75)
 
 
 # dpreds <- arrow::read_parquet("../data_general/proc_data_Oz_fire_recovery/predicted_ttr5-lai-5class_gbm_2021-06-27 13:48:15_.parquet")

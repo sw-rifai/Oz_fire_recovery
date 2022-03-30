@@ -199,6 +199,8 @@ h2o.saveModel(s1,path=paste0("outputs/GBM_bestModWithSpecies_",Sys.time()))
 
 
 mets_s0 <- h2o.performance(s0,newdata = valid)
+mets_s0@metrics$r2
+
 mets_s1 <- h2o.performance(s1,newdata = valid)
 
 p_s0 <- h2o.varimp(s0) %>% 
@@ -373,6 +375,26 @@ dp2 %>% select(x,y,predict) %>% rename(p2 = predict) %>% mutate(idx=1:nrow(dp1))
     limits=c(-500,500),oob=scales::squish)+
   coord_sf()+
   theme_dark()
+
+
+dp1 %>% 
+  ggplot(data=.,aes(elevation,predict,color=cut_number(min_nbr_anom,4)))+
+  geom_smooth()+
+  scale_color_viridis_d(option='B',direction = -1)
+
+
+dp1 %>%
+  sample_n(10000) %>%
+  select(contains(predictors),predict,-species) %>%
+  pivot_longer(cols = -predict) %>%
+  ggplot(data=.,aes(value,predict))+
+  # geom_point()
+  geom_smooth()+
+  # geom_smooth(method='bam',se=F,
+  #   formula=y~s(x,bs='cs'),
+  #   method.args=list(discrete=T))+
+  geom_rug()+
+  facet_wrap(~name,scales='free_x')
 
 
 

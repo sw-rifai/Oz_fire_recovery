@@ -23,13 +23,13 @@ fits[,fire_year := lubridate::year(date_fire1 - months(3))]
 # Composite plot: ttr5~L0/K by year ----------------
 v_top8 <- fits[,.(nobs=.N),by='fire_year'][order(-nobs)]$fire_year[1:8]
 
-pan_b <- fits[fire_year %in% v_top8] %>%  
+pan_b <- fits %>% #[fire_year %in% v_top8] %>%  
   # .[r2>0.3] %>% 
   as_tibble() %>% 
   # sample_n(10000) %>% 
   mutate(fire_year=factor(fire_year)) %>% 
   ggplot(data=.,aes(
-    x=(min_slai)/malai,
+    x=1-(min_slai)/malai,
     # x=L0/K,
     y=ttr5_lai,
     # color=fire_year,group=fire_year
@@ -48,22 +48,68 @@ pan_b <- fits[fire_year %in% v_top8] %>%
   # scale_color_viridis_c(option='H')+
   # scico::scale_color_scico_d()+
   # scale_color_manual(values=pals::glasbey(8))+
-  labs(x=expression(paste(Minimum~LAI['post-fire'],"/","LAI"[MA])),
+  labs(x=expression(paste("Burn Severity (1-"~LAI['post-fire'],"/","LAI"[MA],")")),
     # x=expression(paste("Fraction remaining leaf area:"~italic(L[0]/K),"  (",m**2/m**2,")")), 
        y=expression(paste(MW[12~mo],' Time to Recover (days)')),
        color='Fire year')+
-  coord_cartesian(xlim=c(0,1),
-                  ylim=c(365,2500),
+  coord_cartesian(xlim=c(0,1.0),
+                  ylim=c(365,2000),
                   expand=F)+
   guides(fill = guide_none())+
   theme_linedraw()+
     theme(panel.grid = element_blank(), 
+        axis.text.x = element_text(hjust=0.7),
         legend.background = element_rect(fill=NA),
         legend.title = element_text(size=10),
         legend.text = element_text(size=10),
         legend.position = c(0.25,0), 
         legend.justification = c(0.25,0), 
     legend.direction = 'horizontal'); pan_b
+
+pan_b2 <- fits %>% #[fire_year %in% v_top8] %>%  
+  as.data.table() %>% 
+  .[fire_year>=2001 & fire_year<=2014] %>% 
+  .[isConv==TRUE] %>% 
+  .[r<0.05] %>% 
+  .[r2>0.3] %>% 
+  .[L0<K] %>% 
+  ggplot(data=.,aes(
+    x=1-L0/K,
+    # x=L0/K,
+    y=pred_ttr,
+    # color=fire_year,group=fire_year
+    ))+
+  geom_density_2d_filled(color=NA,
+                         aes(contour_var="ndensity"), 
+                         bins=15)+
+  geom_smooth(method='gam',
+              formula=y~s(x,bs='cs'),
+              method.args=list(select=TRUE), 
+    color='black')+
+  # scale_color_manual(values =rev(pals::parula(8)))+
+  scale_fill_manual(values=rev(pals::brewer.oranges(15) %>% rev))+
+  # scale_fill_discrete(values=rev(pals::ocean.thermal(15)))+
+  # colorspace::scale_fill_discrete_sequential(palette='Grays')+
+  # scale_color_viridis_c(option='H')+
+  # scico::scale_color_scico_d()+
+  # scale_color_manual(values=pals::glasbey(8))+
+  labs(x=expression(paste("Estimated Burn Severity (1-"~italic(L[0]),"/",italic(K),")")),
+    # x=expression(paste("Fraction remaining leaf area:"~italic(L[0]/K),"  (",m**2/m**2,")")), 
+       y=expression(paste('Estimated Time to Recover (days)')),
+       color='Fire year')+
+  coord_cartesian(xlim=c(0,1.0),
+                  ylim=c(0,2000),
+                  expand=F)+
+  guides(fill = guide_none())+
+  theme_linedraw()+
+    theme(panel.grid = element_blank(), 
+        axis.text.x = element_text(hjust=0.7),
+        legend.background = element_rect(fill=NA),
+        legend.title = element_text(size=10),
+        legend.text = element_text(size=10),
+        legend.position = c(0.25,0), 
+        legend.justification = c(0.25,0), 
+    legend.direction = 'horizontal'); pan_b2
 
 pan_c <- expand_grid(tibble(K=c(3,3,3),
                    r=c(0.01, 0.0025, 0.0075),
@@ -101,16 +147,16 @@ pan_c <- expand_grid(tibble(K=c(3,3,3),
   .[r2>0.3] %>% 
   .[L0<K] %>% 
   # .[r2>0.75] %>% 
-  ggplot(data=.,aes(L0/K,r,color=pred_ttr))+
+  ggplot(data=.,aes(1-L0/K,r,color=pred_ttr))+
   geom_point(alpha=0.25,size=0.25)+
   geom_smooth(fullrange=F,
-              aes(L0/K,r),
+              aes(1-L0/K,r),
               formula=y~s(x,bs='cs',k=5),
               color="white",
               weight=5,
               level=0.999)+
   geom_smooth(fullrange=F,
-              aes(L0/K,r),
+              aes(1-L0/K,r),
               formula=y~s(x,bs='cs',k=5),
               # color="#cf0000",
              color='black',
@@ -128,12 +174,15 @@ pan_c <- expand_grid(tibble(K=c(3,3,3),
   )+
   scale_x_continuous(limits=c(0,1),expand=c(0,0))+
   scale_y_continuous(limits=c(0,0.05),expand=c(0,0))+
-  labs(y=expression(paste("Leaf Growth Rate: ",italic(r)~~bgroup("(",frac(m**2,m**2~day),")"))), 
-    x=expression(paste("Fraction remaining leaf area:"~italic(L[0]/K))),
+  labs(
+    y=expression(paste("Recovery Rate: ",italic(r)~"(",LAI~day^-1,")")), 
+    # y=expression(paste("Leaf Growth Rate: ",italic(r)~~bgroup("(",frac(m**2,m**2~day),")"))), 
+    x=expression(paste("Estimated Burn Severity (",1-italic(L[0]/K),")")),
        # x=expression(paste("Fraction remaining leaf area:"~italic(L[0]/K),"  (",m**2/m**2,")")), 
        color="TTR (years)   ")+
   theme_linedraw()+
     theme(panel.grid = element_blank(), 
+        axis.text.x = element_text(hjust=0.7),
       legend.direction = 'horizontal',
       legend.position = c(0.5,0.99),
       legend.justification = c(0.5,0.99),
@@ -167,7 +216,9 @@ pan_c2 <- expand_grid(L0=seq(0.01*3,0.9*3,length.out=1000),
     ylim=c(0,3.1))+
   labs(x='Days after fire',
        y='LAI (m²/m²)', 
-       color=expression(paste("Growth rate: ",italic(r)~~bgroup("(",frac(m**2,m**2~day),")"))))+
+       color=expression(paste("Recovery rate: ",
+         italic(r)~"(",LAI~day^-1,")"))
+    )+
   scale_color_viridis_c(option='B',direction = -1)+
   # scale_color_brewer(palette='Set1')+
   # scale_color_manual(values=c("#cf0000", "#1505fc", "#05ecfc"))+
@@ -192,15 +243,15 @@ pan_a/pan_c2
 #   plot_annotation(tag_levels = 'a',
 #                                     tag_prefix = '(',
 #                                     tag_suffix = ')')
-pan_out <- (pan_b/pan_a/pan_c2)+ plot_layout(ncol=1)+plot_annotation(tag_levels = 'a',
+pan_out <- (pan_b+pan_b2)/(pan_a+pan_c2)+ plot_layout(ncol=1)+plot_annotation(tag_levels = 'a',
                                     tag_prefix = '(',
                                     tag_suffix = ')')
 pan_out
 scale_factor <- 0.333
 ggsave(pan_out, 
-  filename = 'figures/plot_composite_r-L0K_ttr-L0K_logFunDiagram_v2.png', 
-       width=815*scale_factor*0.5, # 815
-       height=815*scale_factor, # 915
+  filename = 'figures/plot_composite_r-L0K_ttr-L0K_logFunDiagram_v3.png', 
+       width=815*scale_factor*1, # 815
+       height=815*scale_factor*0.67, # 915
        units='mm',
        dpi=350)
 

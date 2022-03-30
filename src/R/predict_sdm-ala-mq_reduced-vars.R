@@ -317,7 +317,7 @@ dim(fdat2)
 library(h2o)
 h2o.init()
 
-Sys.setenv(sys.ai.h2o.auc.maxClasses=81)
+Sys.setenv(sys.ai.h2o.auc.maxClasses=200)
 Sys.getenv("sys.ai.h2o.auc.maxClasses")
 
 # Set predictors and response; set response as a factor
@@ -357,7 +357,7 @@ h2o.saveModel(top_mod,
               path=paste0("../data_general/proc_data_Oz_fire_recovery/",
                           "xgboost_euc-sdm-gte80nobs_",Sys.Date(),"_"))
 
-# top_mod <- h2o.loadModel("../data_general/proc_data_Oz_fire_recovery/xgboost_euc-sdm-gte80nobs_2021-07-05_/XGBoost_grid__1_AutoML_20210705_104746_model_8")
+# top_mod <- h2o.loadModel("../data_general/proc_data_Oz_fire_recovery/xgboost_euc-sdm-gte80nobs_2021-07-14_/XGBoost_model_R_1626304422830_1")
 top_mod@parameters$ntrees     # 69
 top_mod@parameters$max_depth  # 20
 top_mod@parameters$col_sample_rate #0.8
@@ -547,13 +547,26 @@ h2o.saveModel(xg1,
               path=paste0("../data_general/proc_data_Oz_fire_recovery/",
                           "xgboost_euc-sdm-gte80nobs_",Sys.Date(),"_"))
 
+xg1
 # 
 # # Error: n-incorrect/n-total
 # # Rate: n-incorrect/n-total
 # # hit ratio: correct/n-total
-p1 <- h2o.performance(xg1, valid)
+p1 <- h2o.performance(xg1, newdata = valid, valid = T)
+plot(xg1)
+show(p1)
+plot(p1,type = 'roc')
+h2o.confusionMatrix(xg1)
 methods(class=class(p1))
 p1_cm <- p1@metrics$cm$table %>% as.data.table()
+p1_cm$Rate[2]
+1-p1_cm$Error[2]
+p1_cm$`Angophora bakeri`
+p1_cm[,1]$`Angophora bakeri`
+mean(p1_cm$Error)
+p1_cm$Error %>% hist
+
+
 p1@metrics$mean_per_class_error # 0.56
 p1@metrics$MSE # 0.5
 p1@metrics$logloss # 2.28
@@ -565,6 +578,13 @@ h2o.gainsLift(p1)
 ff <- h2o.feature_frequencies(xg1,newdata = valid)
 vip::vip(xg1,30)
 p1
+
+
+pred_valid <- h2o.predict(xg1,newdata = valid)
+pred_valid <- pred_valid %>% as.data.table()
+df_valid <- as.data.table(valid)
+yardstick::precision_vec(truth = df_valid$species,estimate = pred_valid$predict, estimator = 'macro')
+
 
 p1_cm <- p1@metrics$cm$table %>% as.data.table()
 z <- p1_cm[,-c("Error","Rate")] %>% as.matrix()

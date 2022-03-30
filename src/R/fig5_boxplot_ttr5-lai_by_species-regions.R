@@ -108,6 +108,12 @@ merge(clim_species, fits[,.(val=median(r)),by=species],by='species') %>%
 # Pixel level cor
 fits %>% select(mapet, matmax,matmin,mavpd15,mappet,elevation,pred_ttr) %>% cor
 
+# species level correlation
+merge(clim_species, fits[,.(val=median(ttr5_lai)),by=species],by='species') %>% 
+  select(-species) %>% 
+  cor
+
+
 str_replace("Eucalyptus cunninghamii",pattern = "Eucalyptus",replacement = "E.")
 
 rank_ttr <- rank_ttr %>% 
@@ -150,8 +156,9 @@ p_right <- fits[is.na(species)==F][ttr5_lai>0] %>%
   theme(panel.grid = element_blank(), 
         legend.position = 'none',
         axis.text.y = element_text(color = rev(vs_listed$color[1:55]), 
-          size=13),
-            axis.title.x = element_text(size=14),
+          size=13,
+          face='italic'),
+        axis.title.x = element_text(size=14),
         axis.text.x  = element_text(size=13),
         # legend.position = c(0.99,0.1), 
         # legend.justification = c(0.99,0.1),
@@ -191,7 +198,8 @@ p_left <- fits[is.na(species)==F][ttr5_lai>0] %>%
   theme_linedraw()+
   theme(panel.grid = element_blank(), 
             axis.text.y = element_text(color = rev(vs_listed$color[56:106]), 
-              size=13),
+              size=13,
+              face='italic'),
         axis.title.x = element_text(size=14),
         axis.text.x  = element_text(size=13),
         legend.position = 'none',#c(0.99,0.01), 
@@ -205,7 +213,7 @@ p_left <- fits[is.na(species)==F][ttr5_lai>0] %>%
 
 scale_factor <- 3
 ggsave(
-       filename="figures/boxplot_ttr5-lai_logfit_by_most-probable-species_v3.png",
+       filename="figures/boxplot_ttr5-lai_movingWindow_by_most-probable-species_v3.png",
        width=8.1*scale_factor,
        height=9.1*scale_factor,
        units='cm',

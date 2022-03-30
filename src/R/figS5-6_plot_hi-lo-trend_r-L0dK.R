@@ -22,6 +22,7 @@ fits <- fits[isConv==TRUE][r2>0][L0<K][L0>=0][r<0.024][r2>0.333][month%in%c(9,10
 # estimate TTR from the logistic function
 fits[,pred_ttr := -log(L0*(-K/(-malai + 0.25*lai_yr_sd) - 1)/(K - L0))/r]
 fits[,fire_year := year(date_fire1-months(3))]
+fits[,bs :=  (1 - min_slai/slai_u)]
 
 # predicted dominant species ---- 
 # sout <- stars::read_stars("../data_general/proc_data_Oz_fire_recovery/predicted_nobs80-species-distribution-ala-mq_2021-06-25 09:34:41.tiff")
@@ -63,11 +64,29 @@ rank_species <- fits[r2>0.2][,.(nobs=.N,
 
 rank_species[ldk_range >= 0.7][n_fy >= 3]
 
+
+merge(fits,rank_species,by='species')[r2>0.3][is.na(species)==F][nobs>=30 & ldk_range >= 0.6][n_fy>=3] %>% 
+  # .[,hi_lo := ifelse(L0/K<=0.5,'lo','hi')] %>% 
+  # filter(hi_lo == 'lo') %>% 
+  filter(bs < 0.5) %>% 
+  nest(data=-species) %>% 
+  mutate(
+    fit = map(data, ~lm(r~I(bs), data=.x)),
+    # fit = map(data, ~lm(r~I(L0/K), data=.x)),
+    tidied = map(fit, tidy)
+  ) %>% 
+  unnest(tidied) %>% 
+  filter(term == "I(bs)") %>% 
+  # filter(p.value < 0.05)
+  pull(estimate) %>% 
+  hist()
+
 d1 <- merge(fits,rank_species,by='species')[r2>0.3][is.na(species)==F][nobs>=50 & ldk_range >= 0.7][n_fy>=3][,hi_lo := ifelse(L0/K<=0.5,'lo','hi')] %>% 
   filter(hi_lo == 'lo') %>% 
   nest(data=-species) %>% 
   mutate(
-    fit = map(data, ~lm(r~I(L0/K), data=.x)),
+    fit = map(data, ~lm(r~I(bs), data=.x)),
+    # fit = map(data, ~lm(r~I(L0/K), data=.x)),
     tidied = map(fit, tidy)
   ) %>% 
   unnest(tidied)
@@ -75,23 +94,25 @@ d2 <- merge(fits,rank_species,by='species')[r2>0.3][is.na(species)==F][nobs>=50 
   filter(hi_lo == 'hi') %>% 
   nest(data=-species) %>% 
   mutate(
-    fit = map(data, ~lm(r~I(L0/K), data=.x)),
+    fit = map(data, ~lm(r~I(bs), data=.x)),
+    # fit = map(data, ~lm(r~I(L0/K), data=.x)),
     tidied = map(fit, tidy)
   ) %>% 
   unnest(tidied)
 
-vec_inc <- d2 %>% filter(term=='I(L0/K)') %>% 
-  filter(estimate > 0) %>% 
+vec_inc <- d2 %>% 
+  filter(term=='I(bs)') %>% 
+  filter(estimate < 0) %>% 
   filter(p.value < 0.05) %>% 
   pull(species)
 
 vec_species <- merge(fits,rank_species,by='species')[r2>0.3][is.na(species)==F][nobs>=50 & ldk_range >= 0.7] %>% pull(species) %>% unique
 vec_not_inc <- vec_species[!vec_species %in% vec_inc]
 
-# plot species that increase r with less burn severity 
-p_inc <- merge(fits,rank_species,by='species')[r2>0.3][is.na(species)==F][nobs>=50 & ldk_range >= 0.7][,hi_lo := ifelse(L0/K<=0.5,'lo','hi')] %>% 
-  .[species %in% vec_inc] %>% 
-  ggplot(data=.,aes(L0/K, r))+
+
+merge(fits,rank_species,by='species')[r2>0.3][is.na(species)==F][nobs>=50 & ldk_range >= 0.7][,hi_lo := ifelse(L0/K<=0.5,'lo','hi')][] %>% 
+  .[species %in% rank_species[order(rank)][rank <= 30]$species] %>% 
+  ggplot(data=.,aes(bs, r))+
   geom_point(alpha=0.125,color='black')+
   # ggpointdensity::geom_pointdensity(adjust=0.25)+
   scico::scale_color_scico(palette='grayC',begin=0.25)+
@@ -104,7 +125,38 @@ p_inc <- merge(fits,rank_species,by='species')[r2>0.3][is.na(species)==F][nobs>=
     formula=y~s(x,bs='cs',k=5), 
     method.args=list(family=Gamma(link='log')))+
   geom_rug()+
-  labs(x=expression(paste("Post Fire Remaining Leaf Fraction: ", frac(L[0],K)~"   (m²/m²)")), 
+  labs(
+    x = expression(paste("Burn Severity (1 - ","LAI"["post-fire"]/"LAI"['norm'],')')),
+    # x=expression(paste("Post Fire Remaining Leaf Fraction: ", frac(L[0],K)~"   (m²/m²)")), 
+       y=expression(paste("Post-fire Recovery Rate: ", bolditalic(r)~(LAI~day**-1) )))+
+  facet_wrap(~species, scales = 'free_y',ncol=3)+
+  theme_linedraw()+
+  theme(
+    text = element_text(size=20),
+    panel.grid = element_blank(),
+    legend.position = 'none', 
+    strip.background = element_blank(), 
+    strip.text = element_text(color='black',face = 'bold'))
+
+# plot species that increase r with less burn severity 
+p_inc <- merge(fits,rank_species,by='species')[r2>0.3][is.na(species)==F][nobs>=50 & ldk_range >= 0.7][,hi_lo := ifelse(L0/K<=0.5,'lo','hi')][] %>% 
+  .[species %in% vec_inc] %>% 
+  ggplot(data=.,aes(bs, r))+
+  geom_point(alpha=0.125,color='black')+
+  # ggpointdensity::geom_pointdensity(adjust=0.25)+
+  scico::scale_color_scico(palette='grayC',begin=0.25)+
+  # scale_color_viridis_c(option='F',end=0.9)+
+  # geom_point(alpha=0.25,col='grey70')+
+  geom_smooth(method='gam',
+    # col='#5569FF', 
+    color='#0066ff',
+    lwd=2,
+    formula=y~s(x,bs='cs',k=5), 
+    method.args=list(family=Gamma(link='log')))+
+  geom_rug()+
+  labs(
+    x = expression(paste("Burn Severity (1 - ","LAI"["post-fire"]/"LAI"['norm'],')')),
+    # x=expression(paste("Post Fire Remaining Leaf Fraction: ", frac(L[0],K)~"   (m²/m²)")), 
        y=expression(paste("Leaf Growth Rate: ", bolditalic(r)~"(m²/day)")))+
   facet_wrap(~species, scales = 'free_y',ncol=3)+
   theme_linedraw()+
@@ -115,16 +167,18 @@ p_inc <- merge(fits,rank_species,by='species')[r2>0.3][is.na(species)==F][nobs>=
     strip.background = element_blank(), 
     strip.text = element_text(color='black',face = 'bold')); p_inc
 scale_fraction <- 0.70
-ggsave(p_inc, filename = 'figures/fig-S5_r_increase-with-L0dK.png', 
+ggsave(p_inc, 
+  filename = 'figures/fig-S5_r_increase-with-burnSeverity.png',
+  # filename = 'figures/fig-S5_r_increase-with-L0dK.png', 
   height=50*scale_fraction, 
   width=45*scale_fraction, 
   units='cm', dpi=350)
 
-# plot species that don't increase r with less burn severity 
+# plot species that don't increase r with burn severity 
 p_dec <- merge(fits,rank_species,by='species')[r2>0.3][is.na(species)==F][nobs>=50 & ldk_range >= 0.7] %>% 
   .[species %in% vec_not_inc] %>% 
   .[,`:=`(spec = str_replace(species, "Eucalyptus","E."))] %>% 
-  ggplot(data=.,aes(L0/K, r))+
+  ggplot(data=.,aes(bs, r))+
   geom_point(col='black',
     alpha=0.125)+
   # ggpointdensity::geom_pointdensity(adjust=0.25)+
@@ -136,7 +190,9 @@ p_dec <- merge(fits,rank_species,by='species')[r2>0.3][is.na(species)==F][nobs>=
     formula=y~s(x,bs='cs',k=5), 
     method.args=list(family=Gamma(link='log')))+
   geom_rug()+
-  labs(x=expression(paste("Remaining Leaf Fraction", frac(L[0],K)~"(m²/m²)")), 
+  labs(
+    x = expression(paste("Burn Severity (1 - ","LAI"["post-fire"]/"LAI"['norm'],')')),
+    # x=expression(paste("Remaining Leaf Fraction", frac(L[0],K)~"(m²/m²)")), 
        y=expression(paste("Leaf Growth Rate: ", bolditalic(r)~"(m²/day)")))+
   facet_wrap(~spec, scales = 'free_y',ncol=4)+
   theme_linedraw()+
@@ -147,7 +203,9 @@ p_dec <- merge(fits,rank_species,by='species')[r2>0.3][is.na(species)==F][nobs>=
     strip.background = element_blank(), 
     strip.text = element_text(color='black',face = 'bold')); p_dec
 scale_fraction <- 0.7
-ggsave(p_dec, filename = 'figures/fig-S6_r_no-increase-with-L0dK.png', 
+ggsave(p_dec, 
+  filename = 'figures/fig-S6_r_no-increase-with-burnSeverity.png', 
+  # filename = 'figures/fig-S6_r_no-increase-with-L0dK.png', 
   height=50*scale_fraction, 
   width=45*scale_fraction, 
   units='cm', dpi=350)

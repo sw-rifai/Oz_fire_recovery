@@ -115,24 +115,67 @@ p_2 <- at_s[trait_name=='regen_strategy'][species%in%unique(fits$species)][
 
 library(mgcViz)
 # Wood density -----------------------------------------------------------------
-m_wd_spat <- at_s[trait_name=='wood_density'][species%in%unique(fits$species)][
+d_wd <- at_s[trait_name=='wood_density'][species%in%unique(fits$species)][
   ,.(species,trait_name,value)
 ][,.(trait = get_mode(value) %>% as.numeric()),by=species] %>% 
-  merge(., fits, by='species') %>% 
-  gam(r~trait+te(x,y),data=.,method='REML')
-m_wd_simp <- at_s[trait_name=='wood_density'][species%in%unique(fits$species)][
-  ,.(species,trait_name,value)
-][,.(trait = get_mode(value) %>% as.numeric()),by=species] %>% 
-  merge(., fits, by='species') %>% 
-  gam(r~trait,data=.,method='REML')
+  merge(., fits, by='species')
 
+m_wd_spat <-   bam(I(r)~
+      trait+
+      # s(trait,k=4,bs='cs')+
+      te(x,y,fx = T),
+    family=Gamma(link='log'),
+    data=d_wd,
+    method='fREML', 
+    select=T,
+    discrete = F)
+
+m_wd_simp <- 
+#   at_s[trait_name=='wood_density'][species%in%unique(fits$species)][
+#   ,.(species,trait_name,value)
+# ][,.(trait = get_mode(value) %>% as.numeric()),by=species] %>% 
+#   merge(., fits, by='species') %>% 
+  bam(I(r)~
+      trait,
+      # s(trait,k=4,bs='cs'),
+    data=d_wd,
+    family=Gamma(link='log'),
+    method='fREML',select=T,discrete = T)
+
+plot(m_wd_spat,scheme = 2,pages=1,rug = T,all.terms = T, 
+  hcolors=scico::scico(10,palette='roma'))
 summary(m_wd_spat)
+
+plot(m_wd_simp, scheme = 2,pages=1,rug=T,all.terms = T)
 summary(m_wd_simp)
 methods(class=class(m_wd_spat))
 
-tibble(trait = seq(0.4,1,length.out=10)) %>% 
-  mutate(r_pred = predict(m_wd_simp, newdata=.)) %>% 
+# WD effect (with spatial effect)
+expand_grid(summarize_all(d_wd,'median') %>% select(-trait),
+  trait = seq(0.4,1,length.out=10)) %>% 
+  mutate(r_pred = predict(m_wd_spat, newdata=.,type='response')) %>% 
+  select(trait,r_pred,x,y) %>% 
   summarize(p_diff = max(r_pred)/min(r_pred))
+
+expand_grid(summarize_all(d_wd,'median') %>% select(-trait),
+  trait = seq(0.4,1,length.out=10)) %>% 
+  mutate(r_pred = predict(m_wd_spat, newdata=.,type='response')) %>% 
+  select(trait,r_pred,x,y) %>% 
+  ggplot(data=.,aes(trait,r_pred))+
+  geom_line()
+
+# WD effect (no spatial effect)
+tibble(trait = seq(0.4,1,length.out=10)) %>% 
+  mutate(r_pred = predict(m_wd_simp, newdata=.,type='response')) %>% 
+  summarize(p_diff = max(r_pred)/min(r_pred))
+
+expand_grid(summarize_all(d_wd,'median') %>% select(-trait),
+  trait = seq(0.4,1,length.out=10)) %>% 
+  mutate(r_pred = predict(m_wd_simp, newdata=.,type='response')) %>% 
+  select(trait,r_pred,x,y) %>% 
+  ggplot(data=.,aes(trait,r_pred))+
+  geom_line()
+
 
 predict(m_wd_spat,
   terms='terms',
@@ -143,64 +186,89 @@ predict(m_wd_spat,
     y=runif(10)
     )) %>% summary
 
-p_wd <- tibble(trait = seq(0.4,1,length.out=10), 
-  x=145,
-  y=-30) %>% 
-  mutate(pred_spat = predict(m_wd_spat,
-  terms='terms',
-  exclude="te(x,y)",
-  # type='iterms',
-  newdata=.
-    )) %>% 
+p_wd <- expand_grid(summarize_all(d_wd,'median') %>% select(-trait),
+  trait = seq(0.4,1,length.out=100)) %>% 
+  # mutate(r_pred = predict(m_wd_spat, newdata=.)) %>% 
+  select(trait,x,y) %>% 
+  mutate(pred_spat = predict(m_wd_spat, type='response',newdata=.)) %>% 
   mutate(pred_simp = predict(m_wd_simp,type='response',newdata=.)) %>% 
-  select(trait, pred_spat,pred_simp) %>%
+  select(trait,
+    pred_spat,
+    pred_simp
+    ) %>%
   pivot_longer(cols = c("pred_spat","pred_simp")) %>% 
-  mutate(name = case_when(name=="pred_spat"~"linear model w/ spatial effect",
-    name=="pred_simp"~"linear model")) %>% 
+  mutate(name = case_when(name=="pred_spat"~"GLM w/ spatial effect",
+    name=="pred_simp"~"GLM")) %>% 
   ggplot(data=.,aes(trait,value,color=name))+
   geom_line()+
   labs(x=expression(paste(Wood~Density~"(g/cm³)")),
-    y=expression(paste(italic(r)~"(m²/day)")), 
+    y=expression(paste(italic(r)~"(m² day¯¹)")), 
     color='model')+
     theme_linedraw()+
   scale_color_viridis_d(option='G',end=0.5)+
-  coord_cartesian(ylim=c(0.004,0.007))+
+  # coord_cartesian(ylim=c(0.004,0.007))+
+  # facet_wrap(~name,scales='free')+
   theme(panel.grid = element_blank())+
-  theme(legend.position = c(0.99,0.01),
-    legend.justification = c(0.99,0.01)); p_wd
+  theme(legend.position = c(0.99,0.01) %>% rev,
+    legend.justification = c(0.99,0.01) %>% rev); p_wd
 
 # SLA -------------------------------------------------------------------------
-at_s[trait_name=='specific_leaf_area'][species%in%unique(fits$species)][
+# prep subdataset
+d_sla <- at_s[trait_name=='specific_leaf_area'][species%in%unique(fits$species)][
   ,.(species,trait_name,value)
 ][,.(trait = get_mode(value) %>% as.numeric()),by=species] %>% 
-  merge(., fits, by='species') %>% 
-  bam(r~trait+te(x,y),data=.) %>% 
+  merge(., fits, by='species')
+
+bam(r~trait+te(x,y),data=d_sla) %>% 
   getViz() %>%
   pterm(1) %>% 
   plot(allTerms=T) %>% 
   print(pages=1)
-m_sla_spat <- at_s[trait_name=='specific_leaf_area'][species%in%unique(fits$species)][
-  ,.(species,trait_name,value)
-][,.(trait = get_mode(value) %>% as.numeric()),by=species] %>% 
-  merge(., fits, by='species') %>% 
-  gam(r~trait+te(x,y),data=.) 
-m_sla_simp <- at_s[trait_name=='specific_leaf_area'][species%in%unique(fits$species)][
-  ,.(species,trait_name,value)
-][,.(trait = get_mode(value) %>% as.numeric()),by=species] %>% 
-  merge(., fits, by='species') %>%
-  lm(r~trait,data=.) 
+
+m_sla_spat <- bam(I(r) ~
+     trait + 
+     # s(log(trait),k=4,bs='cs')+
+     te(x,y,fx=T),
+    data=d_sla, 
+    family=Gamma(link='log'),
+    select=T) 
+plot(m_sla_spat,pages=1,scheme=2,rug=T)
+
+d_sla %>% sample_n(1000) %>% 
+  ggplot(data=.,aes(trait,r*365))+
+  # geom_point()+
+  geom_smooth()
+
+m_sla_simp <- 
+  bam(I(r)~
+      trait,
+      # s(trait,k=4,bs='cs'),
+    data=d_sla,
+    family=Gamma(link='log'),
+    select=T) 
+plot(m_sla_simp, pages=1,scheme=2,all.terms = T,rug=T,residuals = T)
+
 
 summary(m_sla_simp)
 tibble(trait = seq(2,17,length.out=10)) %>% 
-  mutate(r_pred = predict(m_sla_simp, newdata=.)) %>% 
+  mutate(r_pred = predict(m_sla_spat, newdata=., type='response')) %>% 
+  summarize(p_diff = max(r_pred)/min(r_pred))
+
+# SLA effect (with spatial effect)
+expand_grid(summarize_all(d_sla,'median') %>% select(-trait),
+  trait = seq(2,17,length.out=10)) %>% 
+  mutate(r_pred = predict(m_sla_spat, newdata=.,type='response')) %>% 
+  select(trait,r_pred,x,y) %>% 
   summarize(p_diff = max(r_pred)/min(r_pred))
 
 
-predict(m_sla_spat) %>% summary
+
+predict(m_sla_spat,type='response') %>% summary
 predict(m_sla_spat,
   terms='terms',
   exclude="te(x,y)",
   # type='iterms',
+  type='response',
   newdata=tibble(trait = seq(2,17,length.out=10),
     x=runif(10),
     y=runif(10)
@@ -210,6 +278,7 @@ p_sla <- tibble(trait = seq(2,17,length.out=10)) %>%
   terms='terms',
   exclude="te(x,y)",
   # type='iterms',
+  type='response',
   newdata=tibble(trait = seq(2,17,length.out=10),
     x=runif(10),
     y=runif(10)
@@ -217,19 +286,19 @@ p_sla <- tibble(trait = seq(2,17,length.out=10)) %>%
   mutate(pred_simp = predict(m_sla_simp,type='response',newdata=.)) %>% 
   select(trait, pred_spat,pred_simp) %>% 
   pivot_longer(cols = c("pred_spat","pred_simp")) %>% 
-  mutate(name = case_when(name=="pred_spat"~"linear model w/ spatial effect",
-    name=="pred_simp"~"linear model")) %>% 
+  mutate(name = case_when(name=="pred_spat"~"GLM w/ spatial effect",
+    name=="pred_simp"~"GLM")) %>% 
   ggplot(data=.,aes(trait,value,color=name))+
   geom_line()+
   labs(x=expression(paste(Specific~Leaf~Area~"(m²/kg)")),
-    y=expression(paste(italic(r)~"(m²/day)")), 
+    y=expression(paste(italic(r)~" (m² day¯¹)")), 
     color='model')+
     theme_linedraw()+
   scale_color_viridis_d(option='G',end=0.5)+
-  coord_cartesian(ylim=c(0.004,0.007))+
+  # coord_cartesian(ylim=c(0.004,0.007))+
   theme(panel.grid = element_blank())+
-  theme(legend.position = c(0.99,0.01),
-    legend.justification = c(0.99,0.01)); p_sla
+  theme(legend.position = c(0.99,0.01) %>% rev,
+    legend.justification = c(0.99,0.01) %>% rev); p_sla
 
 
 
@@ -239,7 +308,7 @@ p_out <- (p_wd|p_sla)/(p_1|p_2)+plot_annotation(tag_levels='a',
   tag_suffix = ')')
 p_out
 ggsave(p_out,
-  filename = "figures/fig-s9_r_by_trait.png",
+  filename = "figures/fig-s9_r_by_trait_v2.png",
   width=25,
   height=15,
   units='cm',

@@ -150,7 +150,8 @@ dat[,fire_month_f := lubridate::month(date_fire1,label = TRUE,abbr = TRUE)][
                           ordered = TRUE)]#[,dom_sp_f := factor(dom_sp)]
 dat[,vc_name_f := factor(vc_name)]
 dat[,r365 := r*365]
-dat[,`:=`(bs = (min_slai_anom+slai_u)/slai_u)]
+dat[,`:=`(bs = 1 - (min_slai_anom+slai_u)/slai_u)]
+dat[,`:=`(bs = ifelse(bs>1,1,bs))]
 
 pre_fire_slai_range <- arrow::read_parquet("../data_general/proc_data_Oz_fire_recovery/pre-fire_slai_range.parquet")
 
@@ -162,13 +163,21 @@ dat[,`:=`(frac_p12_anom = precip_anom_12mo/map,
 # burn severity model -----------------------------------------------------
 dat_bs <- merge(dat[between(pre_fire_slai_anom_12mo/malai,-1,1)][
                 bs>0
-              ][between(frac_pf_slai_anom_3mo,quantile(dat$frac_pf_slai_anom_3mo,c(0.01,0.99),na.rm=T)[1],quantile(dat$frac_pf_slai_anom_3mo,c(0.01,0.99),na.rm=T)[2])][sample(.N, 50000)], pre_fire_slai_range,by=c("x","y","id"))
+              ][between(frac_pf_slai_anom_3mo,quantile(dat$frac_pf_slai_anom_3mo,c(0.01,0.99),na.rm=T)[1],quantile(dat$frac_pf_slai_anom_3mo,c(0.01,0.99),na.rm=T)[2])], 
+pre_fire_slai_range,by=c("x","y","id"))
+dat_bs[,`:=`(bs = ifelse(bs>1,1,bs))]
+
+
+tmp1 <- dat_bs[sample(.N, 50000)]
+dat_bs_eval <- data.table::fsetdiff(dat_bs,tmp1)
+dat_bs <- tmp1
+
 # dat_bs[sample(.N,1000)] %>% ggplot(data=., aes(slai_range,lai_yr_sd))+
 #   geom_point()
 
 bs1 <- bam(
-  # bs ~ 
-   I((min_slai_anom+slai_u)/slai_u) ~
+  bs ~ # fire_month_f + 
+   # I(1-(min_slai_anom+slai_u)/slai_u) ~
                 # fire_month_f+
                 # s(malai)+
                 # s(I(vpd15_anom_12mo/mavpd15),k=5)+
@@ -196,11 +205,21 @@ bs1 <- bam(
               discrete=TRUE)
 summary(bs1)
 plot(bs1, scheme=2, all.terms=T, pages=1,hcolors=scico::scico(10,palette='roma',direction = -1),scale=0,rug=T)
+dat_bs_eval %>% 
+  mutate(pred = predict(bs1,newdata=.,type='response')) %>%
+  summarize(r2 = yardstick::rsq_trad_vec(bs,pred),
+            mae = yardstick::mae_vec(bs,pred))
+
 
 # r365 model --------------------------------------------------------------
-tmp_dat <- dat[between(pre_fire_slai_anom_12mo/malai,-1,1)][
+dat_r <- dat[between(pre_fire_slai_anom_12mo/malai,-1,1)][
     r<quantile(dat$r,0.99)
-  ][r2>0.1][sample(.N, 50000)]
+  ][r2>0.1]
+
+tmp1 <- dat_r[sample(.N, 50000)]
+dat_r_eval <- data.table::fsetdiff(dat_r,tmp1)
+dat_r <- tmp1
+
 r1 <- bam(r365~
     s(bs,k=5)+
     # s(I((min_slai_anom+slai_u)/slai_u),k=5) +
@@ -212,15 +231,27 @@ r1 <- bam(r365~
     s(log(mappet),k=5),
   family=Gamma(link='identity'),
   # method='fREML',
-  data=tmp_dat, 
+  data=dat_r, 
   select=T,
   discrete=TRUE
   )
 summary(r1)
 plot(r1, scheme=2, all.terms=T, pages=1,hcolors=scico::scico(10,palette='roma',direction = -1),rug=T)
 
+dat_r_eval %>% 
+  mutate(pred = predict(r1,newdata=.,type='response')) %>% 
+  summarize(r2 = yardstick::rsq_trad_vec(r365,pred),
+            mae = yardstick::mae_vec(r365,pred))
+
 
 # TTR5 model --------------------------------------------------------------
+dat_ttr <- dat[between(pre_fire_slai_anom_12mo/malai,-1,1)][
+    between(frac_pf_slai_anom_3mo,-1,1)
+  ]
+tmp1 <- dat_ttr[sample(.N, 50000)]
+dat_ttr_eval <- data.table::fsetdiff(dat_ttr,tmp1)
+dat_ttr <- tmp1
+
 t1 <- bam(
   ttr5_lai ~
     s( bs, k=5)+
@@ -244,14 +275,16 @@ t1 <- bam(
       )
   ,
   family=Gamma(link='identity'),
-  data=dat[between(pre_fire_slai_anom_12mo/malai,-1,1)][
-    between(frac_pf_slai_anom_3mo,-1,1)
-  ][sample(.N, 50000)], 
+  data=dat_ttr, 
   select=T, 
   discrete=TRUE)
 summary(t1)
 plot(t1, scheme=2, all.terms=T, pages=1,hcolors=scico::scico(10,palette='roma',direction = -1),rug=T)
 
+dat_ttr_eval %>% 
+  mutate(pred = predict(t1,newdata=.,type='response')) %>% 
+  summarize(r2 = yardstick::rsq_trad_vec(ttr5_lai,pred),
+            mae = yardstick::mae_vec(ttr5_lai,pred))
 
 
 # Plotting ----------------------------------------------------------------
@@ -379,7 +412,8 @@ p_r1_2 <-  draw(r1,select="frac_pf_slai_anom_3mo",partial_match = T) +
        x = expression(paste("(Pre-fire"~LAI["3 mo. anom"],"):",
          LAI["normal"])))+
   scale_x_continuous(expand=c(0,0), 
-    limits=c(-0.8,0.75))+
+    # limits=c(-0.8,0.75)
+    )+
   theme_linedraw()+
   theme(panel.grid = element_blank()); p_r1_2
 
@@ -419,10 +453,12 @@ p_r1_5 <- draw(r1,select='bs',partial_match = T) +
       # y = expression(paste("Partial effect on ",
       # frac(LAI["post-fire"],LAI["normal"]))),
     title=NULL,
-         x =expression(paste("",
-      LAI["post-fire"],":",LAI["normal"])),
-      )+
-  scale_x_continuous(expand=c(0,0),limits=c(0,0.9))+
+         x =expression(paste("Burn Severity ",
+      "(",1 - LAI["post-fire"],":",LAI["normal"],")"))) +
+  scale_x_continuous(
+    # expand=c(0,0),
+    # limits=c(0,1.01)
+    )+
   theme_linedraw()+
   theme(panel.grid = element_blank()); p_r1_5
 
@@ -466,8 +502,8 @@ p_t1_1 <- draw(t1,select="bs",partial_match = T) +
   geom_hline(yintercept=0,lty=2,col='grey') + 
   # geom_vline(xintercept=0,lty=2,col='grey') + 
     labs(
-      x= expression(paste(
-        LAI["post-fire"],":",LAI["normal"])),
+         x =expression(paste("Burn Severity ",
+      "(",1 - LAI["post-fire"],":",LAI["normal"],")")), 
       y='Effect',
       # y = expression(paste("Effect on ",
       #   "TTR "~(days)
@@ -593,8 +629,8 @@ p_top <- (((p_bs_1|p_bs_2|p_bs_3)+plot_layout(ncol=3))/
   plot_annotation(
   tag_prefix = '(', tag_levels = list(letters[1:6]),tag_suffix = ')',
  title = 
-      expression(paste('Partial effects of the drivers of Leaf Area Burn Consumption ',
-        (LAI["post-fire"]:LAI["norm"])))
+      expression(paste('Partial effects of the drivers of Burn Severity ',
+        (1-~LAI["post-fire"]:LAI["norm"])))
     )) 
 ggsave(p_top,
   filename = "figures/tmp1.png",
@@ -634,5 +670,5 @@ tmp2 <- image_read("figures/tmp2.png")
 tmp3 <- image_read("figures/tmp3.png")
 
 image_out <- image_append(c(tmp1,tmp2,tmp3),stack=T)
-magick::image_write(image_out,path = "figures/Fig_SX_uniResponseGAMS_BS_r_TT.png",format = 'png')
+magick::image_write(image_out,path = "figures/Fig_SX_uniResponseGAMS_BS_r_TT_v2.png",format = 'png')
 

@@ -41,12 +41,13 @@ sum(ts_fs_fires$tot_fires)/sum(ts_tot_fires$tot_fires)
 
 # Process Logistic function fits ----------------------------------------------
 fits <- arrow::read_parquet("../data_general/proc_data_Oz_fire_recovery/slai-1mo_logisticGrowthModel_recoveryTrajectoryfits_1burn_2001-2014fires_2021-06-19 17:33:16.parquet")
+fits[,fire_year := lubridate::year(date_fire1 - months(3))]
+fits_all <- fits # don't drop bad LF fits
 fits <- fits[isConv==TRUE][r2>0][L0<K][L0>=0][r<0.024][r2>0.333][month%in%c(9,10,11,12,1,2)][
   ,ldk:=(L0/K)
 ]
 # estimate TTR from the logistic function
 fits[,pred_ttr := -log(L0*(-K/(-malai + 0.25*lai_yr_sd) - 1)/(K - L0))/r]
-fits[,fire_year := lubridate::year(date_fire1 - months(3))]
 # END **************************************************************************
 
 # Process LAI Anoms ----------------------------------------------
@@ -150,12 +151,21 @@ ts_c_loss <- merge(la2[fire_year>= 2001][fire_year<=2019],
   .[,.(tot_carbon_loss = sum(carbon_loss,na.rm=T)), by=fire_year]
 
 # By what factor did median annual TTR vary by? 
+# ttr_lf
 fits[fire_year>=2001][,.(val = median(pred_ttr)),by=fire_year] %>% 
   .[,.(val2 = max(val)/min(val))]
+# ttr_mw
+fits_all[fire_year>=2001][,.(val = median(ttr5_lai)),by=fire_year] %>% 
+  .[,.(val2 = max(val)/min(val))]
+
 
 # What coef of variation of interannual TTR?
 fits[fire_year>=2001][,.(val = mean(pred_ttr)),by=fire_year] %>% 
   .[,.(val2 = sd(val)/mean(val))]
+# ttr_mw
+fits_all[fire_year>=2001][,.(val = mean(ttr5_lai)),by=fire_year] %>% 
+  .[,.(val2 = sd(val)/mean(val))]
+
 
 # Plotting ----------------------------------------------------------------
 (p1 <- ts_fs_fires %>% 

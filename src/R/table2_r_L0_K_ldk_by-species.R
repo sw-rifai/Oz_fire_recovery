@@ -47,9 +47,10 @@ t2 <- fits %>%
 
 t2 <- t2 %>% select(species,
   starts_with('r'),
-  starts_with("L0"),
+  # starts_with("L0"),
   starts_with("K"),
-  starts_with("ldk"))
+  # starts_with("ldk")
+  )
 
 vec_names <- str_replace(names(t2),"_fn1","_p05")
 vec_names <- str_replace(vec_names,"_fn2","_p50")
@@ -58,13 +59,13 @@ vec_names <- str_replace(vec_names,"_fn3","_p95")
 names(t2) <- vec_names
 
 str_replace(vec_names,"_"," ")
-t_out <- t2 %>% 
-  gt() %>% 
-  fmt_number(columns = 2:4, decimals=3) %>% 
-  fmt_number(columns = 5:13, decimals=2)
-
-t_out %>% 
-  gtsave("doc/Table_S2.rtf")
+# t_out <- t2 %>% 
+#   gt() %>% 
+#   fmt_number(columns = 2:4, decimals=3) %>% 
+#   fmt_number(columns = 5:13, decimals=2)
+# 
+# t_out %>% 
+#   gtsave("doc/Table_S2.rtf")
 
 t2 %>% 
   write_csv(., "doc/Table_S2.csv")
