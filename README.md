@@ -1,18 +1,11 @@
-**code dump/working analysis on recovery from disturbance**
+**Tentative repository for "*Burn severity and post-fire weather are key to predicting time-to-recover from Australian forest fires*"  
+**
 
-to do :
+**Notes:**
 
-\(1\) rm prior model fits
+Repo needs cleaning of deprecated scripts, and remaining scripts are in need of organization.
 
-\(2\) update raster extracts with stars::st_extract
-
-\(3\) add 2021 fire data?
-
-\(4\) document h2o mod fitting process
-
-\(5\) re-run log fits w/broader param constraints?
-
-Notes: approximate processing order:
+**Approximate processing order:**
 
 \(1\) extract\_\*.R \# needs 128gb ram
 
@@ -20,9 +13,7 @@ Notes: approximate processing order:
 
 \(3\) fit_logistic \*\*\* .R \# needs a few hours
 
-\(4\) separate_pixel_groups.R
-
-(?) attach_climate_to_vi \# merge into later scripts?
+\(4\) fit_ttr5-lai_h2o-xgb.R \# produces TTR prediction for BS fires
 
 ### Processing order for predicting recovery time
 
@@ -34,15 +25,7 @@ Notes: approximate processing order:
 
 Notes on script naming convention: 'extract\_*' denotes extracting data from rasters, and writing output in tabular parquet files. Memory heavy. 'functions\_*' helper functions too complex to define in processing scripts. Needs refactor... 'prep\_*' typically uses already extracted data in parquets, and applies pre-processing to prepare the data for model fitting. Memory heavy. 'fit\_*' fits models to preprocessed data and possibly a figure. Should refactor to be consistent w/naming convention. 'plot\_\*' produces one or multiple figures from (mostly) preprocessed data
 
-Notes on defining "time to recover":  
-vi: [ndvi, kndvi, lai, deltaT, cci]
+Notes on defining "time to recover" for vegetation indices (vi):  
+vi: [ndvi, kndvi, lai, deltaT, cci, treecover]
 
-Def 1: vi_anom_3mo \>= 0
-
-Def 2: vi_anom \> 0 during JJA
-
-Def 3: vi_anom_12mo \> mandvi\*0.9
-
-Def 4: vi_anom_12mo \>= mandvi
-
-Def 5: vi_anom_12mo \>= mandvi-0.25\*mandvi_sd
+vi_anom_12mo \>= vi\_{mean annual} - 0.25\*vi\_{sd}
