@@ -1,11 +1,12 @@
-**Tentative repository for "*Burn severity and post-fire weather are key to predicting time-to-recover from Australian forest fires*"  
-**
+## **Tentative repository for "*Burn severity and post-fire weather are key to predicting time-to-recover from Australian forest fires*"** 
 
-**Notes:**
+## Notes:
 
 Repo needs cleaning of deprecated scripts, and remaining scripts are in need of organization.
 
-**Approximate processing order:**
+Parquet files are compressed using the *snappy* codec, which may cause problems for those who have installed *arrow* without *snappy* support.
+
+## Approximate processing order:
 
 \(1\) extract\_\*.R \# needs 128gb ram
 
@@ -15,7 +16,7 @@ Repo needs cleaning of deprecated scripts, and remaining scripts are in need of 
 
 \(4\) fit_ttr5-lai_h2o-xgb.R \# produces TTR prediction for BS fires
 
-### Processing order for predicting recovery time
+## Processing order for predicting recovery time
 
 \(1\) fit_ttr5-lai-ocat_rf.R \# fit predictive model
 
