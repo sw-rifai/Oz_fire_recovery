@@ -1,8 +1,10 @@
-## **Tentative repository for "*Burn severity and post-fire weather are key to predicting time-to-recover from Australian forest fires*"** 
+## **Tentative repository for "*Burn severity and post-fire weather are key to predicting time-to-recover from Australian forest fires*"**
 
 ## Notes:
 
 Repo needs cleaning of deprecated scripts, and remaining scripts are in need of organization.
+
+RS and post-processed model fitting data referenced "../data_general/proc_data_Oz_fire_recovery/" will be made available in an external Zenodo repository.
 
 Parquet files are compressed using the *snappy* codec, which may cause problems for those who have installed *arrow* without *snappy* support.
 
@@ -10,9 +12,9 @@ Parquet files are compressed using the *snappy* codec, which may cause problems 
 
 \(1\) extract\_\*.R \# needs 128gb ram
 
-\(2\) extract_linear_time_to_recover_SE_coast.R \# \<30 min
+\(2\) extract_linear_time_to_recover_SE_coast.R \# \< 30 min
 
-\(3\) fit_logistic \*\*\* .R \# needs a few hours
+\(3\) fit_logistic \*\*\* .R \# needs a few hours with 24 threads
 
 \(4\) fit_ttr5-lai_h2o-xgb.R \# produces TTR prediction for BS fires
 
